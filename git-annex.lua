@@ -2,23 +2,23 @@ dt = require "darktable"
 
 json = require ("dkjson")
 
--- add
-dt.register_event("shortcut", function()
-    git_annex("add", dt.gui.action_images, "adding")
+-- bulk add
+dt.register_event("git annex add", "shortcut", function()
+    git_annex_bulk("add", dt.gui.action_images, "adding")
 end, "git annex: add images")
 
--- get
-dt.register_event("shortcut", function()
-    git_annex("get", dt.gui.action_images, "getting")
-end, "git annex: get images")
+-- bulk get
+dt.register_event("git annex get(bulk)", "shortcut", function()
+    git_annex_bulk("get", dt.gui.action_images, "bulk get")
+end, "git annex: get images(bulk)")
 
--- drop
-dt.register_event("shortcut", function()
-    git_annex("drop", dt.gui.action_images, "dropping")
-end, "git annex: drop images")
+-- bulk drop
+dt.register_event("git annex drop(bulk)", "shortcut", function()
+    git_annex_bulk("drop", dt.gui.action_images, "bulk drop")
+end, "git annex: drop images(bulk)")
 
 -- status
-dt.register_event("shortcut", function()
+dt.register_event("git annex status", "shortcut", function()
     --git_annex("status", dt.gui.action_images, "dropping")
     get_status(dt.gui.action_images)
 end, "git annex: status")
@@ -28,22 +28,18 @@ end, "git annex: status")
 --   cmd - string, the git annex subcommand
 --   images - table, of dt_lua_image_t
 --   msg - string, the verb to be displayed to the user
-function git_annex(cmd, images, msg)
+function git_annex_bulk(cmd, images, msg)
+    notice = msg.. " from git annex"
+    dt.print(notice)
+    local filelist = {}
     for _,image in pairs(images) do
-        notice = msg.." " .. image.filename .. " from git annex"
-        dt.print(notice)
-        result = call_git_annex(image.path, cmd, image.filename)
-
-        if result then
-            dt.print("finished "..notice)
-            if cmd == "get" or cmd == "add" then
-                set_tags(image, true)
-            elseif cmd == "drop" then
-                set_tags(image, false)
-            end
-        else
-            dt.print("failed "..notice)
-        end
+        filepath = image.path.."/" .. image.filename
+        table.insert(filelist, filepath)
+    end
+    result = call_git_annex_bulk(cmd, table.unpack(filelist))
+    if result then
+        dt.print("finished "..notice)
+        get_status(images)
     end
 end
 
@@ -95,8 +91,9 @@ end
 
 -- end borrowed
 
-function call_git_annex(annex_path, cmd, ...)
-    command = { "git", "-C", annex_path, "annex", cmd, ... }
+function call_git_annex_bulk(cmd, ...)
+    local annex_path = "/home/michael/Bilder"
+    command = { "git", "-C", annex_path, "annex", cmd, ...}
     return shell.execute(command)
 end
 
@@ -136,7 +133,7 @@ function get_status(images)
         if #filenames > 25 then
             filenames = {}
         end
-        out=call_git_annex_p(path, "whereis", "-j", unpack(filenames))
+        out=call_git_annex_p(path, "whereis", "-j", table.unpack(filenames))
         for line in out:lines() do
             status = json.decode(line)
             whereis = status["whereis"]
