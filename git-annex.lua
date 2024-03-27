@@ -1,6 +1,6 @@
 local dt = require "darktable"
 local du = require "lib/dtutils"
-local json = require ("dkjson")
+local json = require "lib/dkjson"
 
 du.check_min_api_version("7.0.0", "darktable-git-annex module")
 
