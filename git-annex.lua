@@ -2,6 +2,7 @@ local dt = require "darktable"
 local du = require "lib/dtutils"
 local json = require "dkjson"
 
+
 local function set_tags(image, here)
     if here then
         dt.tags.attach(dt.tags.create("git-annex|here"), image)
@@ -49,6 +50,14 @@ end
 
 
 -- end borrowed
+
+local function get_annex_rootdir()
+    local images = dt.gui.selection()
+        for _,image in pairs(images) do
+            local f_annex_rootdir = shell_popen({"git", "-C", image.path, "rev-parse", "--show-toplevel"})
+            file_chooser_button.value = f_annex_rootdir:read("l")
+        end
+end
 
 local function call_git_annex_bulk(cmd, ...)
     local annex_path = file_chooser_button.value
@@ -308,3 +317,5 @@ dt.register_event("git annex status", "shortcut", function()
     --git_annex("status", dt.gui.action_images, "dropping")
     get_status(dt.gui.action_images)
 end, "git annex: status")
+
+dt.register_event("image selection changed", "selection-changed", get_annex_rootdir)
