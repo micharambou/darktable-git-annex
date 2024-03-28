@@ -80,28 +80,51 @@ local file_chooser_button = dt.new_widget("file_chooser_button")
 -- https://www.darktable.org/lua-api/types_lua_separator.html
 local separator = dt.new_widget("separator"){}
 
-local button_selection_get = dt.new_widget("button")
+local button_box = dt.new_widget("box")
 {
-    label = _("Selection: get (bulk)"),
-    clicked_callback = function (_)
-        git_annex_bulk("get", dt.gui.action_images, "bulk get")
-    end
+    orientation = "vertical",
+    dt.new_widget("box")
+    {
+        orientation = "horizontal",
+        dt.new_widget("button")
+        {
+            label = _("Selection: get (bulk)"),
+            clicked_callback = function (_)
+                git_annex_bulk("get", "bulk get", false)
+            end
+        },
+        dt.new_widget("button")
+        {
+            label = _("Selection: drop (bulk)"),
+            clicked_callback = function (_)
+                git_annex_bulk("drop", "bulk drop", false)
+            end
+        }
+    },
+    dt.new_widget("box")
+    {
+        orientation = "horizontal",
+        dt.new_widget("button")
+        {
+            label = _("Collection: get (bulk)"),
+            clicked_callback = function (_)
+                git_annex_bulk("get", "get drop", true)
+            end
+        },
+        dt.new_widget("button")
+        {
+            label = _("Collection: drop (bulk)"),
+            clicked_callback = function (_)
+                git_annex_bulk("drop", "bulk drop", true)
+            end
+        }
+    }
 }
-
-local button_selection_drop = dt.new_widget("button")
-{
-    label = _("Selection: drop (bulk)"),
-    clicked_callback = function (_)
-        git_annex_bulk("drop", dt.gui.action_images, "bulk drop")
-    end
-}
-
 -- pack the widgets in a table for loading in the module
 
 table.insert(mE.widgets, file_chooser_button)
 table.insert(mE.widgets, separator)
-table.insert(mE.widgets, button_selection_get)
-table.insert(mE.widgets, button_selection_drop)
+table.insert(mE.widgets, button_box)
 
 -- ... and tell dt about it all
 
@@ -126,23 +149,23 @@ end
 -- it's time to destroy the script and then return the data to 
 -- script_manager
 script_data.destroy = destroy
-script_data.restart = restart  -- only required for lib modules until we figure out how to destroy them
+script_data.restart = restart -- only required for lib modules until we figure out how to destroy them
 script_data.destroy_method = "hide" -- tell script_manager that we are hiding the lib so it knows to use the restart function
 script_data.show = restart  -- if the script was "off" when darktable exited, the module is hidden, so force it to show on start
 
 -- bulk add
 dt.register_event("git annex add", "shortcut", function()
-    git_annex_bulk("add", dt.gui.action_images, "adding")
+    git_annex_bulk("add", "adding")
 end, "git annex: add images")
 
 -- bulk get
 dt.register_event("git annex get(bulk)", "shortcut", function()
-    git_annex_bulk("get", dt.gui.action_images, "bulk get")
+    git_annex_bulk("get", "bulk get")
 end, "git annex: get images(bulk)")
 
 -- bulk drop
 dt.register_event("git annex drop(bulk)", "shortcut", function()
-    git_annex_bulk("drop", dt.gui.action_images, "bulk drop")
+    git_annex_bulk("drop", "bulk drop")
 end, "git annex: drop images(bulk)")
 
 -- status
@@ -156,15 +179,24 @@ end, "git annex: status")
 --   cmd - string, the git annex subcommand
 --   images - table, of dt_lua_image_t
 --   msg - string, the verb to be displayed to the user
-function git_annex_bulk(cmd, images, msg)
+function git_annex_bulk(cmd, msg, on_collection)
+    local images = {}
     notice = msg.. " from git annex"
     dt.print(notice)
+    if on_collection then
+        local col_images = dt.collection
+        for i, image in ipairs(col_images) do
+            table.insert(images,i,image)
+        end
+    else
+        images = dt.gui.selection()
+    end
     local filelist = {}
     for _,image in pairs(images) do
         filepath = image.path.."/" .. image.filename
         table.insert(filelist, filepath)
     end
-    result = call_git_annex_bulk(cmd, table.unpack(filelist))
+    local result = call_git_annex_bulk(cmd, table.unpack(filelist))
     if result then
         dt.print("finished "..notice)
         get_status(images)
