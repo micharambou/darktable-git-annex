@@ -56,6 +56,7 @@ local function get_annex_rootdir()
         for _,image in pairs(images) do
             local f_annex_rootdir = shell_popen({"git", "-C", image.path, "rev-parse", "--show-toplevel"})
             file_chooser_button.value = f_annex_rootdir:read("l")
+            break
         end
 end
 
