@@ -1,6 +1,6 @@
 local dt = require "darktable"
 local du = require "lib/dtutils"
-local json = require ("dkjson")
+local json = require "lib/dkjson"
 
 du.check_min_api_version("7.0.0", "darktable-git-annex module")
 
@@ -149,7 +149,7 @@ end
 -- it's time to destroy the script and then return the data to 
 -- script_manager
 script_data.destroy = destroy
-script_data.restart = restart -- only required for lib modules until we figure out how to destroy them
+script_data.restart = restart  -- only required for lib modules until we figure out how to destroy them
 script_data.destroy_method = "hide" -- tell script_manager that we are hiding the lib so it knows to use the restart function
 script_data.show = restart  -- if the script was "off" when darktable exited, the module is hidden, so force it to show on start
 
@@ -177,9 +177,9 @@ end, "git annex: status")
 
 -- executes git annex with the given subcommand on the selected files
 --   cmd - string, the git annex subcommand
---   images - table, of dt_lua_image_t
 --   msg - string, the verb to be displayed to the user
-function git_annex_bulk(cmd, msg, on_collection)
+--   on_collection - bool, true if action shall be executed on whole collection, otherwise false
+local function git_annex_bulk(cmd, msg, on_collection)
     local images = {}
     notice = msg.. " from git annex"
     dt.print(notice)
@@ -203,7 +203,7 @@ function git_annex_bulk(cmd, msg, on_collection)
     end
 end
 
-function set_tags(image, here)
+local function set_tags(image, here)
     if here then
         dt.tags.attach(dt.tags.create("git-annex|here"), image)
         dt.tags.detach(dt.tags.create("git-annex|dropped"), image)
@@ -220,7 +220,7 @@ end
 -- borrowed from http://lua-users.org/lists/lua-l/2010-07/msg00087.html
 shell = {}
 
-function shell.escape(...)
+local function shell.escape(...)
     local command = type(...) == 'table' and ... or { ... }
     for i, s in ipairs(command) do
         s = (tostring(s) or ''):gsub('"', '\\"')
@@ -234,14 +234,14 @@ function shell.escape(...)
     return table.concat(command, ' ')
     end
 
-function shell.execute(...)
+local function shell.execute(...)
     cmd = shell.escape(...)
     print(cmd)
     --return os.execute(shell.escape(...))
     return os.execute(cmd)
 end
 
-function shell.popen(...)
+local function shell.popen(...)
     cmd = shell.escape(...)
     print(cmd)
     --return os.execute(shell.escape(...))
@@ -251,20 +251,20 @@ end
 
 -- end borrowed
 
-function call_git_annex_bulk(cmd, ...)
+local function call_git_annex_bulk(cmd, ...)
     local annex_path = file_chooser_button.value
     command = { "git", "-C", annex_path, "annex", cmd, ...}
     return shell.execute(command)
 end
 
-function call_git_annex_p(annex_path, cmd, ...)
+local function call_git_annex_p(annex_path, cmd, ...)
     command = { "git", "-C", annex_path, "annex", cmd, ... }
     return shell.popen(command)
 end
 
 
 -- borrowed from http://en.wikibooks.org/wiki/Lua_Functional_Programming/Functions
-function map(func, array)
+local function map(func, array)
     local new_array = {}
     for i,v in ipairs(array) do
         new_array[i] = func(v)
@@ -273,7 +273,7 @@ function map(func, array)
 end
 -- end borrowed
 
-function get_status(images)
+local function get_status(images)
     paths = {}
     for _, image in ipairs(images) do
         if not paths[image.path] then
