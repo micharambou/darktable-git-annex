@@ -1,6 +1,6 @@
 local dt = require "darktable"
 local du = require "lib/dtutils"
-local json = require "lib/dkjson"
+local json = require "dkjson"
 
 du.check_min_api_version("7.0.0", "darktable-git-annex module")
 
@@ -188,7 +188,7 @@ end
 -- borrowed from http://lua-users.org/lists/lua-l/2010-07/msg00087.html
 shell = {}
 
-local function shell.escape(...)
+local function shell_escape(...)
     local command = type(...) == 'table' and ... or { ... }
     for i, s in ipairs(command) do
         s = (tostring(s) or ''):gsub('"', '\\"')
@@ -202,17 +202,17 @@ local function shell.escape(...)
     return table.concat(command, ' ')
     end
 
-local function shell.execute(...)
-    cmd = shell.escape(...)
+local function shell_exeute(...)
+    cmd = shell_escape(...)
     print(cmd)
-    --return os.execute(shell.escape(...))
+    --return os.execute(shell_escape(...))
     return os.execute(cmd)
 end
 
-local function shell.popen(...)
-    cmd = shell.escape(...)
+local function shell_popen(...)
+    cmd = shell_escape(...)
     print(cmd)
-    --return os.execute(shell.escape(...))
+    --return os.execute(shell_escape(...))
     return io.popen(cmd)
 end
 
@@ -222,12 +222,12 @@ end
 local function call_git_annex_bulk(cmd, ...)
     local annex_path = file_chooser_button.value
     command = { "git", "-C", annex_path, "annex", cmd, ...}
-    return shell.execute(command)
+    return shell_exeute(command)
 end
 
 local function call_git_annex_p(annex_path, cmd, ...)
     command = { "git", "-C", annex_path, "annex", cmd, ... }
-    return shell.popen(command)
+    return shell_popen(command)
 end
 
 
