@@ -1,6 +1,13 @@
+local function script_path()
+    local str = debug.getinfo(2, "S").source:sub(2)
+    return str:match("(.*/)")
+ end
+
+package.path = package.path .. ";" .. script_path() .. "/?.lua"
+
 local dt = require "darktable"
 local du = require "lib/dtutils"
-local json = require "dkjson"
+local json = require "lib/dkjson"
 
 local function set_tags(image, here)
     if here then
