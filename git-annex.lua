@@ -9,6 +9,15 @@ local dt = require "darktable"
 local du = require "lib/dtutils"
 local json = require "lib/dkjson"
 
+local function image_table_lenght(T)
+    -- counts elements in image_table
+    local count = 0
+    if not T then return count end
+    for _ in pairs(T) do
+        count = count + 1
+        return count
+    end
+end
 
 local function set_tags(image, here)
     if here then
@@ -25,7 +34,7 @@ local function set_tags(image, here)
 end
 
 -- borrowed from http://lua-users.org/lists/lua-l/2010-07/msg00087.html
-shell = {}
+local shell = {}
 
 local function shell_escape(...)
     local command = type(...) == 'table' and ... or { ... }
@@ -42,15 +51,15 @@ local function shell_escape(...)
     end
 
 local function shell_exeute(...)
-    cmd = shell_escape(...)
-    print(cmd)
+    local cmd = shell_escape(...)
+    --print(cmd)
     --return os.execute(shell_escape(...))
     return os.execute(cmd)
 end
 
 local function shell_popen(...)
-    cmd = shell_escape(...)
-    print(cmd)
+    local cmd = shell_escape(...)
+    --print(cmd)
     --return os.execute(shell_escape(...))
     return io.popen(cmd)
 end
@@ -58,23 +67,19 @@ end
 
 -- end borrowed
 
-local function get_annex_rootdir()
-    local images = dt.gui.selection()
-        for _,image in pairs(images) do
+local function annex_rootdir(image)
             local f_annex_rootdir = shell_popen({"git", "-C", image.path, "rev-parse", "--show-toplevel"})
-            file_chooser_button.value = f_annex_rootdir:read("l")
-            break
+            return f_annex_rootdir:read("l")
         end
-end
 
-local function call_git_annex_bulk(cmd, ...)
-    local annex_path = file_chooser_button.value
-    command = { "git", "-C", annex_path, "annex", cmd, ...}
+local function call_git_annex_bulk(cmd, annex_path, ...)
+    --local annex_path = file_chooser_button.value
+    local command = { "git", "-C", annex_path, "annex", cmd, ...}
     return shell_exeute(command)
 end
 
 local function call_git_annex_p(annex_path, cmd, ...)
-    command = { "git", "-C", annex_path, "annex", cmd, ... }
+    local command = { "git", "-C", annex_path, "annex", cmd, ... }
     return shell_popen(command)
 end
 
@@ -90,7 +95,7 @@ end
 -- end borrowed
 
 local function get_status(images)
-    paths = {}
+    local paths = {}
     for _, image in ipairs(images) do
         if not paths[image.path] then
             paths[image.path] = {}
@@ -99,8 +104,7 @@ local function get_status(images)
     end
 
     for path, path_images in pairs(paths) do
-        print(path)
-        filenames = {}
+        local filenames = {}
         for _, image in pairs(path_images) do
             table.insert(filenames, image.filename)
         end
@@ -109,11 +113,11 @@ local function get_status(images)
         if #filenames > 25 then
             filenames = {}
         end
-        out=call_git_annex_p(path, "whereis", "-j", table.unpack(filenames))
+        local out=call_git_annex_p(path, "whereis", "-j", table.unpack(filenames))
         for line in out:lines() do
-            status = json.decode(line)
-            whereis = status["whereis"]
-            here = false
+            local status = json.decode(line)
+            local whereis = status["whereis"]
+            local here = false
             for _, location in ipairs(whereis) do
                 if location["here"] then
                     here = true
@@ -132,7 +136,7 @@ end
 --   on_collection - bool, true if action shall be executed on whole collection, otherwise false
 local function git_annex_bulk(cmd, msg, on_collection)
     local images = {}
-    notice = msg.. " from git annex"
+    local notice = msg.. " from git annex"
     dt.print(notice)
     if on_collection then
         local col_images = dt.collection
@@ -142,15 +146,30 @@ local function git_annex_bulk(cmd, msg, on_collection)
     else
         images = dt.gui.selection()
     end
-    local filelist = {}
-    for _,image in pairs(images) do
-        filepath = image.path.."/" .. image.filename
-        table.insert(filelist, filepath)
+    local t = {}
+    local imagesMetatable = {
+        __index = function (t, k, value)
+            rawset(t, k, {value})
+            return t
+        end
+    }
+    setmetatable(t, imagesMetatable)
+    local function addfile(t, rootdir, filename)
+        if type(t[rootdir]) == "table" then 
+            table.insert(t[rootdir],filename) end
     end
-    local result = call_git_annex_bulk(cmd, table.unpack(filelist))
-    if result then
-        dt.print("finished "..notice)
-        get_status(images)
+    for _,image in pairs(images) do
+        addfile(t, annex_rootdir(image), image.path.."/"..image.filename)
+    end
+    for rootdir, filelist in pairs(t) do
+        local result = call_git_annex_bulk(cmd, rootdir, table.unpack(filelist))
+        if result then
+            dt.print("finished "..notice.." in repository: "..rootdir)
+            get_status(images)
+        else
+            dt.print("errored " ..notice.." in repository: "..rootdir)
+            get_status(images)
+        end
     end
 end
 
@@ -199,9 +218,8 @@ local function install_module()
         dt.new_widget("box") -- widget
         {
             orientation = "vertical",
-            dt.new_widget("label")
-            {
-                label = "git annex root dir"
+            dt.new_widget("label"){
+                label = "git annex"
             },
             table.unpack(mE.widgets),
         },
@@ -222,61 +240,57 @@ local function restart()
     dt.gui.libs["git annex module"].visible = true -- the user wants to use it again, so we just make it visible and it shows up in the UI
 end
 
-file_chooser_button = dt.new_widget("file_chooser_button")
-{
-    title = _("set git annex root directory"),  -- The title of the window when choosing a file
-    value = "",                       -- The currently selected file
-    is_directory = true               -- True if the file chooser button only allows directories to be selected
-}
-
 -- https://www.darktable.org/lua-api/types_lua_separator.html
 local separator = dt.new_widget("separator"){}
 
-local button_box = dt.new_widget("box")
-{
-    orientation = "vertical",
-    dt.new_widget("box")
-    {
+local selection_button_box = dt.new_widget("box"){
         orientation = "horizontal",
-        dt.new_widget("button")
-        {
-            label = _("Selection: get (bulk)"),
+        sensitive = false,
+        dt.new_widget("button"){
+            label = _("Selection: add"),
             clicked_callback = function (_)
-                git_annex_bulk("get", "bulk get", false)
+                git_annex_bulk("add", "get", false)
             end
         },
-        dt.new_widget("button")
-        {
-            label = _("Selection: drop (bulk)"),
+        dt.new_widget("button"){
+            label = _("Selection: get"),
             clicked_callback = function (_)
-                git_annex_bulk("drop", "bulk drop", false)
-            end
-        }
-    },
-    dt.new_widget("box")
-    {
-        orientation = "horizontal",
-        dt.new_widget("button")
-        {
-            label = _("Collection: get (bulk)"),
-            clicked_callback = function (_)
-                git_annex_bulk("get", "get drop", true)
+                git_annex_bulk("get","get", false)
             end
         },
-        dt.new_widget("button")
-        {
-            label = _("Collection: drop (bulk)"),
+        dt.new_widget("button"){
+            label = _("Selection: drop"),
             clicked_callback = function (_)
-                git_annex_bulk("drop", "bulk drop", true)
+                git_annex_bulk("drop", "drop", false)
             end
         }
     }
-}
+local collection_button_box = dt.new_widget("box"){
+        orientation = "horizontal",
+        dt.new_widget("button"){
+            label = _("Collection: add"),
+            clicked_callback = function (_)
+                git_annex_bulk("add", "add", true)
+            end
+        },
+        dt.new_widget("button"){
+            label = _("Collection: get"),
+            clicked_callback = function (_)
+                git_annex_bulk("get", "get", true)
+            end
+        },
+        dt.new_widget("button"){
+            label = _("Collection: drop"),
+            clicked_callback = function (_)
+                git_annex_bulk("drop", "drop", true)
+            end
+        }
+    }
 -- pack the widgets in a table for loading in the module
 
-table.insert(mE.widgets, file_chooser_button)
 table.insert(mE.widgets, separator)
-table.insert(mE.widgets, button_box)
+table.insert(mE.widgets, selection_button_box)
+table.insert(mE.widgets, collection_button_box)
 
 -- ... and tell dt about it all
 
@@ -305,20 +319,20 @@ script_data.restart = restart  -- only required for lib modules until we figure 
 script_data.destroy_method = "hide" -- tell script_manager that we are hiding the lib so it knows to use the restart function
 script_data.show = restart  -- if the script was "off" when darktable exited, the module is hidden, so force it to show on start
 
--- bulk add
+-- add
 dt.register_event("git annex add", "shortcut", function()
     git_annex_bulk("add", "adding", false)
 end, "git annex: add images")
 
--- bulk get
-dt.register_event("git annex get(bulk)", "shortcut", function()
-    git_annex_bulk("get", "bulk get", false)
-end, "git annex: get images(bulk)")
+-- get
+dt.register_event("git annex get", "shortcut", function()
+    git_annex_bulk("get", "get", false)
+end, "git annex: get images")
 
--- bulk drop
+-- drop
 dt.register_event("git annex drop(bulk)", "shortcut", function()
-    git_annex_bulk("drop", "bulk drop", false)
-end, "git annex: drop images(bulk)")
+    git_annex_bulk("drop", "drop", false)
+end, "git annex: drop images")
 
 -- status
 dt.register_event("git annex status", "shortcut", function()
@@ -326,4 +340,10 @@ dt.register_event("git annex status", "shortcut", function()
     get_status(dt.gui.action_images)
 end, "git annex: status")
 
-dt.register_event("image selection changed", "selection-changed", get_annex_rootdir)
+dt.register_event("image selection changed", "selection-changed", function ()
+    if next(dt.gui.selection()) == nil then
+        selection_button_box.sensitive = false
+    else
+        selection_button_box.sensitive = true
+    end
+end)
