@@ -52,7 +52,7 @@ local function shell_escape(...)
 
 local function shell_exeute(...)
     local cmd = shell_escape(...)
-    --print(cmd)
+    print(cmd)
     --return os.execute(shell_escape(...))
     return os.execute(cmd)
 end
@@ -218,7 +218,7 @@ local function install_module()
         dt.new_widget("box") -- widget
         {
             orientation = "vertical",
-            dt.new_widget("label"){
+            dt.new_widget("section_label"){
                 label = "git annex"
             },
             table.unpack(mE.widgets),
@@ -241,7 +241,9 @@ local function restart()
 end
 
 -- https://www.darktable.org/lua-api/types_lua_separator.html
-local separator = dt.new_widget("separator"){}
+local separator = dt.new_widget("separator"){
+    orientation = "horizontal"
+}
 
 local selection_button_box = dt.new_widget("box"){
         orientation = "horizontal",
@@ -286,11 +288,59 @@ local collection_button_box = dt.new_widget("box"){
             end
         }
     }
+local section_sync = dt.new_widget("section_label"){
+    label = "sync"
+}
+local syncdir_entry = dt.new_widget("text_view"){
+    tooltip = "list of directories to sync, one per line",
+    text = [[/home/michael/git-annex-test
+/home/michael/git-annex-test-backup]]
+}
+local sync_separator = dt.new_widget("separator"){
+    orientation = "horizontal"
+}
+local sync_checkbox = true
+
+local syncbox = dt.new_widget("box"){
+    orientation = "horizontal",
+    dt.new_widget("button"){
+        label = _("git annex sync"),
+        clicked_callback = function (_)
+            for line in string.gmatch(syncdir_entry.text, "[^\r\n]+") do
+                local syncdir = string.gsub(line, "\n", "")
+                local cmd = {"git", "-C", syncdir, "annex", "sync"}
+                if sync_checkbox then
+                    table.insert(cmd, "--content")
+                end
+                local result = shell_exeute(cmd)
+                if result then
+                    dt.print("sync for repo "..syncdir.." successfull")
+                else
+                    dt.print("error syncing repo "..syncdir)
+                end
+            end
+        end,
+    },
+    dt.new_widget("separator"){
+        orientation = "vertical"
+    },
+    dt.new_widget("check_button"){
+        label = "--content",
+        value = true,
+        clicked_callback = function (w)
+            sync_checkbox = w.value
+        end
+    },
+}
 -- pack the widgets in a table for loading in the module
 
 table.insert(mE.widgets, separator)
 table.insert(mE.widgets, selection_button_box)
 table.insert(mE.widgets, collection_button_box)
+table.insert(mE.widgets, section_sync)
+table.insert(mE.widgets, syncdir_entry)
+table.insert(mE.widgets, sync_separator)
+table.insert(mE.widgets, syncbox)
 
 -- ... and tell dt about it all
 
