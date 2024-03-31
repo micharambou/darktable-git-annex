@@ -293,8 +293,7 @@ local section_sync = dt.new_widget("section_label"){
 }
 local syncdir_entry = dt.new_widget("text_view"){
     tooltip = "list of directories to sync, one per line",
-    text = [[/home/michael/git-annex-test
-/home/michael/git-annex-test-backup]]
+    -- text = [[/path/to/repository]]
 }
 local sync_separator = dt.new_widget("separator"){
     orientation = "horizontal"
@@ -308,7 +307,7 @@ local syncbox = dt.new_widget("box"){
         clicked_callback = function (_)
             for line in string.gmatch(syncdir_entry.text, "[^\r\n]+") do
                 local syncdir = string.gsub(line, "\n", "")
-                local cmd = {"git", "-C", syncdir, "annex", "sync"}
+                cmd = {"git", "-C", syncdir, "annex", "sync"}
                 if sync_checkbox then
                     table.insert(cmd, "--content")
                 end
@@ -332,6 +331,19 @@ local syncbox = dt.new_widget("box"){
         end
     },
 }
+local sync_scandb_button = dt.new_widget("button"){
+    label = _("scan db"),
+    clicked_callback = function (_)
+        t_rootdir = {}
+        for _, image in ipairs(dt.database) do
+            local rootdir = annex_rootdir(image)
+            t_rootdir[rootdir] = rootdir
+        end
+        for _, v in pairs(t_rootdir) do
+            print(v)
+        end
+    end
+}
 -- pack the widgets in a table for loading in the module
 
 table.insert(mE.widgets, separator)
@@ -341,6 +353,7 @@ table.insert(mE.widgets, section_sync)
 table.insert(mE.widgets, syncdir_entry)
 table.insert(mE.widgets, sync_separator)
 table.insert(mE.widgets, syncbox)
+table.insert(mE.widgets, sync_scandb_button)
 
 -- ... and tell dt about it all
 
