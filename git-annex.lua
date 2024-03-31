@@ -9,13 +9,16 @@ local dt = require "darktable"
 local du = require "lib/dtutils"
 local json = require "lib/dkjson"
 
-local function image_table_lenght(T)
-    -- counts elements in image_table
-    local count = 0
-    if not T then return count end
-    for _ in pairs(T) do
-        count = count + 1
-        return count
+local function t_contains(t, value)
+    if next(t) == nil then
+        return false
+    else
+        for _, v in pairs(t) do
+            if v == value then
+                return true
+            end
+        end
+        return false
     end
 end
 
@@ -304,12 +307,20 @@ local sync_separator = dt.new_widget("separator"){
 }
 local sync_checkbox = true
 
+local function text2table(s)
+    local t = {}
+    for line in string.gmatch(s, "[^\r\n]+") do
+        table.insert(t, line)
+    end
+    return t
+end
+
 local syncbox = dt.new_widget("box"){
     orientation = "horizontal",
     dt.new_widget("button"){
         label = _("git annex sync"),
         clicked_callback = function (_)
-            for line in string.gmatch(syncdir_entry.text, "[^\r\n]+") do
+            for _, line in pairs(text2table(syncdir_entry.text)) do
                 local syncdir = string.gsub(line, "\n", "")
                 cmd = {"git", "-C", syncdir, "annex", "sync"}
                 if sync_checkbox then
@@ -354,10 +365,17 @@ local sync_scandb_button = dt.new_widget("button"){
         end
         for path, _ in pairs(pathSet) do
             local rootdir = annex_rootdir_bypath(path)
-            t_rootdir[rootdir] = rootdir
+            if not t_contains(t_rootdir, rootdir) then
+                table.insert(t_rootdir, rootdir)
+            end
         end
-        for _, v in pairs(t_rootdir) do
-            syncdir_entry.text = string.format("%s\n%s", v, syncdir_entry.text)
+        t_syncdir_entry = text2table(syncdir_entry.text)
+        for k, v in pairs(t_rootdir) do
+            if t_contains(t_syncdir_entry, v) then
+                table.remove(t_rootdir, k)
+            else
+                syncdir_entry.text = string.format("%s\n%s", v, syncdir_entry.text)
+            end
         end
     end
 }
