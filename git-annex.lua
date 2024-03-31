@@ -350,20 +350,13 @@ local sync_scandb_button = dt.new_widget("button"){
     label = _("scan db"),
     clicked_callback = function (_)
         local t_rootdir = {}
-        local pathSet = {}
-        local pathMetatable = {
-            __index = function (t, k, value)
-                rawset(t, k, {value})
-                return t
-            end
-        }
-        setmetatable(pathSet, pathMetatable)
+        local t_path = {}
         for _, image in ipairs(dt.database) do
-            if type(pathSet[image.path]) == table then 
-                table.insert(pathSet[image.path], image.filename)
+            if not t_contains(t_path, image.path) then
+                table.insert(t_path, image.path)
             end
         end
-        for path, _ in pairs(pathSet) do
+        for _, path in pairs(t_path) do
             local rootdir = annex_rootdir_bypath(path)
             if not t_contains(t_rootdir, rootdir) then
                 table.insert(t_rootdir, rootdir)
