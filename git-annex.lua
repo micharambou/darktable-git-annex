@@ -380,8 +380,8 @@ table.insert(mE.widgets, collection_button_box)
 table.insert(mE.widgets, section_sync)
 table.insert(mE.widgets, syncdir_entry)
 table.insert(mE.widgets, sync_separator)
-table.insert(mE.widgets, syncbox)
 table.insert(mE.widgets, sync_scandb_button)
+table.insert(mE.widgets, syncbox)
 
 -- ... and tell dt about it all
 
