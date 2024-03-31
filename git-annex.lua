@@ -71,6 +71,10 @@ local function annex_rootdir(image)
             local f_annex_rootdir = shell_popen({"git", "-C", image.path, "rev-parse", "--show-toplevel"})
             return f_annex_rootdir:read("l")
         end
+local function annex_rootdir_bypath(path)
+            local f_annex_rootdir = shell_popen({"git", "-C", path, "rev-parse", "--show-toplevel"})
+            return f_annex_rootdir:read("l")
+        end
 
 local function call_git_annex_bulk(cmd, annex_path, ...)
     --local annex_path = file_chooser_button.value
@@ -334,13 +338,26 @@ local syncbox = dt.new_widget("box"){
 local sync_scandb_button = dt.new_widget("button"){
     label = _("scan db"),
     clicked_callback = function (_)
-        t_rootdir = {}
+        local t_rootdir = {}
+        local pathSet = {}
+        local pathMetatable = {
+            __index = function (t, k, value)
+                rawset(t, k, {value})
+                return t
+            end
+        }
+        setmetatable(pathSet, pathMetatable)
         for _, image in ipairs(dt.database) do
-            local rootdir = annex_rootdir(image)
+            if type(pathSet[image.path]) == table then 
+                table.insert(pathSet[image.path], image.filename)
+            end
+        end
+        for path, _ in pairs(pathSet) do
+            local rootdir = annex_rootdir_bypath(path)
             t_rootdir[rootdir] = rootdir
         end
         for _, v in pairs(t_rootdir) do
-            print(v)
+            syncdir_entry.text = string.format("%s\n%s", v, syncdir_entry.text)
         end
     end
 }
