@@ -179,6 +179,16 @@ local function git_annex_bulk(cmd, msg, on_collection)
 	end
 end
 
+local sync_checkbox = true
+
+local function text2table(s)
+	local t = {}
+	for line in string.gmatch(s, "[^\r\n]+") do
+		table.insert(t, line)
+	end
+	return t
+end
+
 du.check_min_api_version("7.0.0", "darktable-git-annex module")
 
 -- return data structure for script_manager
@@ -202,17 +212,17 @@ local function _(msgid)
 end
 
 -- declare a local namespace and a couple of variables we'll need to install the module
-local mE = {}
-mE.widgets = {}
-mE.event_registered = false -- keep track of whether we've added an event callback or not
-mE.module_installed = false -- keep track of whether the module is module_installed
+local mGa = {}
+mGa.widgets = {}
+mGa.event_registered = false -- keep track of whether we've added an event callback or not
+mGa.module_installed = false -- keep track of whether the module is module_installed
 
 --[[ We have to create the module in one of two ways depending on which view darktable starts
 in.  In orker to not repeat code, we wrap the darktable.register_lib in a local function.
 ]]
 
 local function install_module()
-	if not mE.module_installed then
+	if not mGa.module_installed then
 		-- https://www.darktable.org/lua-api/index.html#darktable_register_lib
 		dt.register_lib(
 			"git annex module", -- Module name
@@ -221,19 +231,11 @@ local function install_module()
 			false, -- resetable
 			{ [dt.gui.views.lighttable] = { "DT_UI_CONTAINER_PANEL_RIGHT_CENTER", 100 } }, -- containers
 			-- https://www.darktable.org/lua-api/types_lua_box.html
-			dt
-				.new_widget("box") -- widget
-				({
-					orientation = "vertical",
-					dt.new_widget("section_label")({
-						label = "git annex",
-					}),
-					table.unpack(mE.widgets),
-				}),
+			mGa.widgets.main_box,
 			nil, -- view_enter
 			nil -- view_leave
 		)
-		mE.module_installed = true
+		mGa.module_installed = true
 	end
 end
 
@@ -247,106 +249,107 @@ local function restart()
 	dt.gui.libs["git annex module"].visible = true -- the user wants to use it again, so we just make it visible and it shows up in the UI
 end
 
--- https://www.darktable.org/lua-api/types_lua_separator.html
-local separator = dt.new_widget("separator")({
-	orientation = "horizontal",
-})
-
-local selection_button_box = dt.new_widget("box")({
+-- Selection action Buttons
+-- add
+mGa.widgets.selection_add_btn = dt.new_widget("button"){
+	label = _("Selection: add"),
+	clicked_callback = function(_)
+		git_annex_bulk("add", "add", false)
+	end
+}
+-- get
+mGa.widgets.selection_get_btn =	dt.new_widget("button"){
+	label = _("Selection: get"),
+	clicked_callback = function(_)
+		git_annex_bulk("get", "get", false)
+	end
+}
+-- drop
+mGa.widgets.selection_drop_btn =dt.new_widget("button"){
+	label = _("Selection: drop"),
+	clicked_callback = function(_)
+		git_annex_bulk("drop", "drop", false)
+	end
+}
+-- horizontal box containing selection action buttons
+mGa.widgets.selection_box = dt.new_widget("box")({
 	orientation = "horizontal",
 	sensitive = false,
-	dt.new_widget("button")({
-		label = _("Selection: add"),
-		clicked_callback = function(_)
-			git_annex_bulk("add", "get", false)
-		end,
-	}),
-	dt.new_widget("button")({
-		label = _("Selection: get"),
-		clicked_callback = function(_)
-			git_annex_bulk("get", "get", false)
-		end,
-	}),
-	dt.new_widget("button")({
-		label = _("Selection: drop"),
-		clicked_callback = function(_)
-			git_annex_bulk("drop", "drop", false)
-		end,
-	}),
+	mGa.widgets.selection_add_btn,
+	mGa.widgets.selection_get_btn,
+	mGa.widgets.selection_drop_btn
 })
-local collection_button_box = dt.new_widget("box")({
+-- collection action buttons
+-- add
+mGa.widgets.collection_add_btn = dt.new_widget("button"){
+	label = _("Collection: add"),
+	clicked_callback = function(_)
+		git_annex_bulk("add", "add", true)
+	end
+}
+-- get
+mGa.widgets.collection_get_btn = dt.new_widget("button"){
+	label = _("Collection: get"),
+	clicked_callback = function(_)
+		git_annex_bulk("get", "get", true)
+	end
+}
+-- drop
+mGa.widgets.collection_drop_btn = dt.new_widget("button"){
+	label = _("Collection: drop"),
+	clicked_callback = function(_)
+		git_annex_bulk("drop", "drop", true)
+	end
+}
+-- horizontal box containing collection action buttons
+mGa.widgets.collection_button_box = dt.new_widget("box")({
 	orientation = "horizontal",
-	dt.new_widget("button")({
-		label = _("Collection: add"),
-		clicked_callback = function(_)
-			git_annex_bulk("add", "add", true)
-		end,
-	}),
-	dt.new_widget("button")({
-		label = _("Collection: get"),
-		clicked_callback = function(_)
-			git_annex_bulk("get", "get", true)
-		end,
-	}),
-	dt.new_widget("button")({
-		label = _("Collection: drop"),
-		clicked_callback = function(_)
-			git_annex_bulk("drop", "drop", true)
-		end,
-	}),
+	mGa.widgets.collection_add_btn,
+	mGa.widgets.collection_get_btn,
+	mGa.widgets.collection_drop_btn
 })
-local section_sync = dt.new_widget("section_label")({
-	label = "sync",
-})
-local syncdir_entry = dt.new_widget("text_view")({
+-- action box
+mGa.widgets.action_box = dt.new_widget("box"){
+	dt.new_widget("section_label"){
+		label = "git annex"
+	},
+	mGa.widgets.selection_box,
+	mGa.widgets.collection_button_box
+}
+-- multiline input for user defined sync directories
+mGa.widgets.syncdir_entry = dt.new_widget("text_view")({
 	tooltip = "list of directories to sync, one per line",
 	-- text = [[/path/to/repository]]
 })
-local sync_separator = dt.new_widget("separator")({
-	orientation = "horizontal",
-})
-local sync_checkbox = true
-
-local function text2table(s)
-	local t = {}
-	for line in string.gmatch(s, "[^\r\n]+") do
-		table.insert(t, line)
-	end
-	return t
-end
-
-local syncbox = dt.new_widget("box")({
-	orientation = "horizontal",
-	dt.new_widget("button")({
-		label = _("git annex sync"),
-		clicked_callback = function(_)
-			for _, line in pairs(text2table(syncdir_entry.text)) do
-				local syncdir = string.gsub(line, "\n", "")
-				cmd = { "git", "-C", syncdir, "annex", "sync" }
-				if sync_checkbox then
-					table.insert(cmd, "--content")
-				end
-				local result = shell_exeute(cmd)
-				if result then
-					dt.print("sync for repo " .. syncdir .. " successfull")
-				else
-					dt.print("error syncing repo " .. syncdir)
-				end
+-- git annex sync button
+mGa.widgets.sync_btn = dt.new_widget("button"){
+	label = _("git annex sync"),
+	clicked_callback = function(_)
+		for _, line in pairs(text2table(mGa.widgets.syncdir_entry.text)) do
+			local syncdir = string.gsub(line, "\n", "")
+			local cmd = { "git", "-C", syncdir, "annex", "sync" }
+			if sync_checkbox then
+				table.insert(cmd, "--content")
 			end
-		end,
-	}),
-	dt.new_widget("separator")({
-		orientation = "vertical",
-	}),
-	dt.new_widget("check_button")({
-		label = "--content",
-		value = true,
-		clicked_callback = function(w)
-			sync_checkbox = w.value
-		end,
-	}),
-})
-local sync_scandb_button = dt.new_widget("button")({
+			local result = shell_exeute(cmd)
+			if result then
+				dt.print("sync for repo " .. syncdir .. " successfull")
+			else
+				dt.print("error syncing repo " .. syncdir)
+			end
+		end
+	end,
+}
+-- check button for '--content' argument
+mGa.widgets.sync_content_check_btn = dt.new_widget("check_button"){
+	label = "--content",
+	value = true,
+	clicked_callback = function(w)
+		sync_checkbox = w.value
+	end,
+}
+-- scandb db button (scan dt libary for git repositories and add them to syncdir_entry
+mGa.widgets.sync_scandb_btn = dt.new_widget("button")({
 	label = _("scan db"),
 	clicked_callback = function(_)
 		local t_rootdir = {}
@@ -362,33 +365,45 @@ local sync_scandb_button = dt.new_widget("button")({
 				table.insert(t_rootdir, rootdir)
 			end
 		end
-		local t_syncdir_entry = text2table(syncdir_entry.text)
+		local t_syncdir_entry = text2table(mGa.widgets.syncdir_entry.text)
 		for k, v in pairs(t_rootdir) do
 			if t_contains(t_syncdir_entry, v) then
 				table.remove(t_rootdir, k)
 			else
-				syncdir_entry.text = string.format("%s\n%s", v, syncdir_entry.text)
+				mGa.widgets.syncdir_entry.text = string.format("%s\n%s", v, mGa.widgets.syncdir_entry.text)
 			end
 		end
 	end,
 })
--- pack the widgets in a table for loading in the module
-
-table.insert(mE.widgets, separator)
-table.insert(mE.widgets, selection_button_box)
-table.insert(mE.widgets, collection_button_box)
-table.insert(mE.widgets, section_sync)
-table.insert(mE.widgets, syncdir_entry)
-table.insert(mE.widgets, sync_separator)
-table.insert(mE.widgets, sync_scandb_button)
-table.insert(mE.widgets, syncbox)
+-- sync box
+mGa.widgets.sync_box = dt.new_widget("box"){
+	orientation = "vertical",
+	dt.new_widget("section_label"){
+		label = "git annex sync"
+	},
+	mGa.widgets.syncdir_entry,
+	mGa.widgets.sync_scandb_btn,
+	dt.new_widget("box"){
+		orientation = "horizontal",
+		mGa.widgets.sync_btn,
+		dt.new_widget("separator")({
+			orientation = "vertical",
+		}),
+		mGa.widgets.sync_content_check_btn
+	}
+}
+-- main box
+mGa.widgets.main_box = dt.new_widget("box"){
+	mGa.widgets.action_box,
+	mGa.widgets.sync_box
+}
 
 -- ... and tell dt about it all
 
 if dt.gui.current_view().id == "lighttable" then -- make sure we are in lighttable view
 	install_module() -- register the lib
 else
-	if not mE.event_registered then -- if we are not in lighttable view then register an event to signal when we might be
+	if not mGa.event_registered then -- if we are not in lighttable view then register an event to signal when we might be
 		-- https://www.darktable.org/lua-api/index.html#darktable_register_event
 		dt.register_event(
 			"git annex module",
@@ -399,7 +414,7 @@ else
 				end
 			end
 		)
-		mE.event_registered = true --  keep track of whether we have an event handler installed
+		mGa.event_registered = true --  keep track of whether we have an event handler installed
 	end
 end
 
@@ -434,8 +449,8 @@ end, "git annex: status")
 
 dt.register_event("image selection changed", "selection-changed", function()
 	if next(dt.gui.selection()) == nil then
-		selection_button_box.sensitive = false
+		mGa.widgets.selection_box.sensitive = false
 	else
-		selection_button_box.sensitive = true
+		mGa.widgets.selection_box.sensitive = true
 	end
 end)
