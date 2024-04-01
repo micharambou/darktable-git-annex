@@ -385,13 +385,11 @@ mGa.widgets.sync_scandb_btn = dt.new_widget("button")({
 		end
 		local t_syncdir_entry = text2table(mGa.widgets.syncdir_entry.text)
 		for k, v in pairs(t_rootdir) do
-			if t_contains(t_syncdir_entry, v) then
-				table.remove(t_rootdir, k)
-			else
+			if not t_contains(t_syncdir_entry, v) then
 				mGa.widgets.syncdir_entry.text = string.format("%s\n%s", v, mGa.widgets.syncdir_entry.text)
 			end
 		end
-	end,
+	end
 })
 -- sync box
 mGa.widgets.sync_box = dt.new_widget("box"){
