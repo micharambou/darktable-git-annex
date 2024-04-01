@@ -9,6 +9,18 @@ local dt = require("darktable")
 local du = require("lib/dtutils")
 local json = require("lib/dkjson")
 
+local MODULE = "git-annex"
+local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
+
+-- preferences
+-- default sync directory
+dt.preferences.register(MODULE,
+                        PREF_SYNC_DEFAULT_DIR,
+                        "directory",
+                        "Git annex: default sync repository",
+                        "A user defined repository to automatically add to sync directory list",
+                        "")
+
 local function t_contains(t, value)
 	if next(t) == nil then
 		return false
@@ -39,7 +51,15 @@ end
 -- borrowed from http://lua-users.org/lists/lua-l/2010-07/msg00087.html
 local shell = {}
 
-local function shell_escape(...)
+setmetatable(shell, {
+	__index = function(self, program)
+	return function(...)
+	return shell.execute(program, ...) == 0
+	end
+	end,
+})
+
+function shell.escape(...)
 	local command = type(...) == "table" and ... or { ... }
 	for i, s in ipairs(command) do
 		s = (tostring(s) or ""):gsub('"', '\\"')
@@ -53,40 +73,38 @@ local function shell_escape(...)
 	return table.concat(command, " ")
 end
 
-local function shell_exeute(...)
-	local cmd = shell_escape(...)
-	print(cmd)
-	--return os.execute(shell_escape(...))
+function shell.execute(...)
+	local cmd = shell.escape(...)
+	--print(cmd)
 	return os.execute(cmd)
 end
 
-local function shell_popen(...)
-	local cmd = shell_escape(...)
+function shell.popen(...)
+	local cmd = shell.escape(...)
 	--print(cmd)
-	--return os.execute(shell_escape(...))
 	return io.popen(cmd)
 end
 
 -- end borrowed
 
 local function annex_rootdir(image)
-	local f_annex_rootdir = shell_popen({ "git", "-C", image.path, "rev-parse", "--show-toplevel" })
+	local f_annex_rootdir = shell.popen({ "git", "-C", image.path, "rev-parse", "--show-toplevel" })
 	return f_annex_rootdir:read("l")
 end
 local function annex_rootdir_bypath(path)
-	local f_annex_rootdir = shell_popen({ "git", "-C", path, "rev-parse", "--show-toplevel" })
+	local f_annex_rootdir = shell.popen({ "git", "-C", path, "rev-parse", "--show-toplevel" })
 	return f_annex_rootdir:read("l")
 end
 
 local function call_git_annex_bulk(cmd, annex_path, ...)
 	--local annex_path = file_chooser_button.value
 	local command = { "git", "-C", annex_path, "annex", cmd, ... }
-	return shell_exeute(command)
+	return shell.execute(command)
 end
 
 local function call_git_annex_p(annex_path, cmd, ...)
 	local command = { "git", "-C", annex_path, "annex", cmd, ... }
-	return shell_popen(command)
+	return shell.popen(command)
 end
 
 -- borrowed from http://en.wikibooks.org/wiki/Lua_Functional_Programming/Functions
@@ -217,9 +235,23 @@ mGa.widgets = {}
 mGa.event_registered = false -- keep track of whether we've added an event callback or not
 mGa.module_installed = false -- keep track of whether the module is module_installed
 
---[[ We have to create the module in one of two ways depending on which view darktable starts
-in.  In orker to not repeat code, we wrap the darktable.register_lib in a local function.
-]]
+-- sync function supposed to be called on startup and by button click 
+local sync_btn_callback = function()
+	for _, line in pairs(text2table(mGa.widgets.syncdir_entry.text)) do
+		local syncdir = string.gsub(line, "\n", "")
+		local cmd = { "git", "-C", syncdir, "annex", "sync" }
+		if sync_checkbox then
+			table.insert(cmd, "--content")
+		end
+		dt.print("sync for repo " .. syncdir)
+		local result = shell.execute(cmd)
+		if result then
+			dt.print("sync for repo " .. syncdir .. " successfull")
+		else
+			dt.print("error syncing repo " .. syncdir)
+		end
+	end
+end
 
 local function install_module()
 	if not mGa.module_installed then
@@ -319,26 +351,12 @@ mGa.widgets.action_box = dt.new_widget("box"){
 -- multiline input for user defined sync directories
 mGa.widgets.syncdir_entry = dt.new_widget("text_view")({
 	tooltip = "list of directories to sync, one per line",
-	-- text = [[/path/to/repository]]
+	text = dt.preferences.read(MODULE, PREF_SYNC_DEFAULT_DIR, "directory")
 })
 -- git annex sync button
 mGa.widgets.sync_btn = dt.new_widget("button"){
 	label = _("git annex sync"),
-	clicked_callback = function(_)
-		for _, line in pairs(text2table(mGa.widgets.syncdir_entry.text)) do
-			local syncdir = string.gsub(line, "\n", "")
-			local cmd = { "git", "-C", syncdir, "annex", "sync" }
-			if sync_checkbox then
-				table.insert(cmd, "--content")
-			end
-			local result = shell_exeute(cmd)
-			if result then
-				dt.print("sync for repo " .. syncdir .. " successfull")
-			else
-				dt.print("error syncing repo " .. syncdir)
-			end
-		end
-	end,
+	clicked_callback = sync_btn_callback
 }
 -- check button for '--content' argument
 mGa.widgets.sync_content_check_btn = dt.new_widget("check_button"){
@@ -454,3 +472,5 @@ dt.register_event("image selection changed", "selection-changed", function()
 		mGa.widgets.selection_box.sensitive = true
 	end
 end)
+
+return script_data
