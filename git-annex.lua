@@ -12,14 +12,20 @@ local json = require("lib/dkjson")
 local MODULE = "git-annex"
 local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
 
+local METADATA_KEYS = {
+	"annex.numcopies"
+}
+
 -- preferences
 -- default sync directory
-dt.preferences.register(MODULE,
-                        PREF_SYNC_DEFAULT_DIR,
-                        "directory",
-                        "Git annex: default sync repository",
-                        "A user defined repository to automatically add to sync directory list",
-                        "")
+dt.preferences.register(
+	MODULE,
+	PREF_SYNC_DEFAULT_DIR,
+	"directory",
+	"Git annex: default sync repository",
+	"A user defined repository to automatically add to sync directory list",
+	""
+)
 
 local function t_contains(t, value)
 	if next(t) == nil then
@@ -53,9 +59,9 @@ local shell = {}
 
 setmetatable(shell, {
 	__index = function(self, program)
-	return function(...)
-	return shell.execute(program, ...) == 0
-	end
+		return function(...)
+			return shell.execute(program, ...) == 0
+		end
 	end,
 })
 
@@ -235,7 +241,7 @@ mGa.widgets = {}
 mGa.event_registered = false -- keep track of whether we've added an event callback or not
 mGa.module_installed = false -- keep track of whether the module is module_installed
 
--- sync function supposed to be called on startup and by button click 
+-- sync function supposed to be called on startup and by button click
 local sync_btn_callback = function()
 	for _, line in pairs(text2table(mGa.widgets.syncdir_entry.text)) do
 		local syncdir = string.gsub(line, "\n", "")
@@ -283,89 +289,89 @@ end
 
 -- Selection action Buttons
 -- add
-mGa.widgets.selection_add_btn = dt.new_widget("button"){
+mGa.widgets.selection_add_btn = dt.new_widget("button")({
 	label = _("Selection: add"),
 	clicked_callback = function(_)
 		git_annex_bulk("add", "add", false)
-	end
-}
+	end,
+})
 -- get
-mGa.widgets.selection_get_btn =	dt.new_widget("button"){
+mGa.widgets.selection_get_btn = dt.new_widget("button")({
 	label = _("Selection: get"),
 	clicked_callback = function(_)
 		git_annex_bulk("get", "get", false)
-	end
-}
+	end,
+})
 -- drop
-mGa.widgets.selection_drop_btn =dt.new_widget("button"){
+mGa.widgets.selection_drop_btn = dt.new_widget("button")({
 	label = _("Selection: drop"),
 	clicked_callback = function(_)
 		git_annex_bulk("drop", "drop", false)
-	end
-}
+	end,
+})
 -- horizontal box containing selection action buttons
 mGa.widgets.selection_box = dt.new_widget("box")({
 	orientation = "horizontal",
 	sensitive = false,
 	mGa.widgets.selection_add_btn,
 	mGa.widgets.selection_get_btn,
-	mGa.widgets.selection_drop_btn
+	mGa.widgets.selection_drop_btn,
 })
 -- collection action buttons
 -- add
-mGa.widgets.collection_add_btn = dt.new_widget("button"){
+mGa.widgets.collection_add_btn = dt.new_widget("button")({
 	label = _("Collection: add"),
 	clicked_callback = function(_)
 		git_annex_bulk("add", "add", true)
-	end
-}
+	end,
+})
 -- get
-mGa.widgets.collection_get_btn = dt.new_widget("button"){
+mGa.widgets.collection_get_btn = dt.new_widget("button")({
 	label = _("Collection: get"),
 	clicked_callback = function(_)
 		git_annex_bulk("get", "get", true)
-	end
-}
+	end,
+})
 -- drop
-mGa.widgets.collection_drop_btn = dt.new_widget("button"){
+mGa.widgets.collection_drop_btn = dt.new_widget("button")({
 	label = _("Collection: drop"),
 	clicked_callback = function(_)
 		git_annex_bulk("drop", "drop", true)
-	end
-}
+	end,
+})
 -- horizontal box containing collection action buttons
 mGa.widgets.collection_button_box = dt.new_widget("box")({
 	orientation = "horizontal",
 	mGa.widgets.collection_add_btn,
 	mGa.widgets.collection_get_btn,
-	mGa.widgets.collection_drop_btn
+	mGa.widgets.collection_drop_btn,
 })
 -- action box
-mGa.widgets.action_box = dt.new_widget("box"){
-	dt.new_widget("section_label"){
-		label = "git annex"
-	},
+mGa.widgets.action_box = dt.new_widget("box")({
+	dt.new_widget("section_label")({
+		label = "git annex",
+	}),
 	mGa.widgets.selection_box,
-	mGa.widgets.collection_button_box
-}
+	mGa.widgets.collection_button_box,
+})
 -- multiline input for user defined sync directories
 mGa.widgets.syncdir_entry = dt.new_widget("text_view")({
 	tooltip = "list of directories to sync, one per line",
-	text = dt.preferences.read(MODULE, PREF_SYNC_DEFAULT_DIR, "directory")
+	text = dt.preferences.read(MODULE, PREF_SYNC_DEFAULT_DIR, "directory"),
 })
 -- git annex sync button
-mGa.widgets.sync_btn = dt.new_widget("button"){
+mGa.widgets.sync_btn = dt.new_widget("button")({
 	label = _("git annex sync"),
-	clicked_callback = sync_btn_callback
-}
+	clicked_callback = sync_btn_callback,
+})
 -- check button for '--content' argument
-mGa.widgets.sync_content_check_btn = dt.new_widget("check_button"){
+mGa.widgets.sync_content_check_btn = dt.new_widget("check_button")({
 	label = "--content",
 	value = true,
 	clicked_callback = function(w)
 		sync_checkbox = w.value
 	end,
-}
+})
 -- scandb db button (scan dt libary for git repositories and add them to syncdir_entry
 mGa.widgets.sync_scandb_btn = dt.new_widget("button")({
 	label = _("scan db"),
@@ -389,30 +395,71 @@ mGa.widgets.sync_scandb_btn = dt.new_widget("button")({
 				mGa.widgets.syncdir_entry.text = string.format("%s\n%s", v, mGa.widgets.syncdir_entry.text)
 			end
 		end
-	end
+	end,
 })
 -- sync box
-mGa.widgets.sync_box = dt.new_widget("box"){
+mGa.widgets.sync_box = dt.new_widget("box")({
 	orientation = "vertical",
-	dt.new_widget("section_label"){
-		label = "git annex sync"
-	},
+	dt.new_widget("section_label")({
+		label = "git annex sync",
+	}),
 	mGa.widgets.syncdir_entry,
 	mGa.widgets.sync_scandb_btn,
-	dt.new_widget("box"){
+	dt.new_widget("box")({
 		orientation = "horizontal",
 		mGa.widgets.sync_btn,
 		dt.new_widget("separator")({
 			orientation = "vertical",
 		}),
-		mGa.widgets.sync_content_check_btn
+		mGa.widgets.sync_content_check_btn,
+	}),
+})
+local t_widgets_metadata_rules = {}
+
+local function toogle_widget_sens(widget, value)
+	widget.sensitive = value
+end
+
+for i = 1, 5 do
+	t_widgets_metadata_rules[i] = {
+		entry = dt.new_widget("entry")({}),
+		combobox = dt.new_widget("combobox")({
+			table.unpack(METADATA_KEYS),
+		}),
 	}
-}
+	t_widgets_metadata_rules[i].box = dt.new_widget("box")({
+		orientation = "horizontal",
+		dt.new_widget("check_button")({
+			value = true,
+			label = i .. utf8.char(0x2605),
+			clicked_callback = function (self)
+				toogle_widget_sens(t_widgets_metadata_rules[i].combobox, self.value)
+				toogle_widget_sens(t_widgets_metadata_rules[i].entry, self.value)
+			end
+		}),
+		t_widgets_metadata_rules[i].combobox,
+		t_widgets_metadata_rules[i].entry
+	})
+end
+
+local t_boxes = {}
+for _, v in pairs(t_widgets_metadata_rules) do
+	table.insert(t_boxes, v.box)
+end
+-- metadata box
+mGa.widgets.metadata_box = dt.new_widget("box")({
+	orientation = "vertical",
+	dt.new_widget("section_label")({
+		label = "Metadata",
+	}),
+	table.unpack(t_boxes),
+})
 -- main box
-mGa.widgets.main_box = dt.new_widget("box"){
+mGa.widgets.main_box = dt.new_widget("box")({
 	mGa.widgets.action_box,
-	mGa.widgets.sync_box
-}
+	mGa.widgets.sync_box,
+	mGa.widgets.metadata_box,
+})
 
 -- ... and tell dt about it all
 
