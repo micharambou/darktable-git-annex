@@ -8,12 +8,32 @@ package.path = package.path .. ";" .. script_path() .. "/?.lua"
 local dt = require("darktable")
 local du = require("lib/dtutils")
 local json = require("lib/dkjson")
+-- local inspect = require("lib/inspect")
 
 local MODULE = "git-annex"
 local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
 
-local METADATA_KEYS = {
+local T_METADATA_KEYS = {
 	"annex.numcopies"
+}
+
+local T_OPERATORS = {
+	["="] = function (x, y) return x == y end,
+	[">"] = function (x, y) return x > y end,
+	["<"] = function (x, y) return x < y end,
+}
+
+local T_IMAGE_PROPS = {
+	["rating"] = function (image) return image.rating end
+}
+
+local T_METADATA_CONDITIONS = {
+	{ ["label"] = "1" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 1 },
+	{ ["label"] = "2" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 2 },
+	{ ["label"] = "3" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 3 },
+	{ ["label"] = "4" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 4 },
+	{ ["label"] = "5" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 5 },
+	{ ["label"] = "reject", ["image_prop"] = "rating", ["op"] = "=", ["value"] = -1 },
 }
 
 -- preferences
@@ -37,6 +57,22 @@ local function t_contains(t, value)
 			end
 		end
 		return false
+	end
+end
+
+local function match_metadata_condition (condition, image)
+	local prop = T_IMAGE_PROPS[condition["image_prop"]](image)
+	local value = condition["value"]
+	return T_OPERATORS[condition["op"]](prop, value)
+end
+
+local function set_annex_metadata(...)
+	for _, image in pairs(...) do 
+		for i, condition in pairs(T_METADATA_CONDITIONS) do
+			if match_metadata_condition(condition, image) then
+				print("match for image: " .. image.filename .. " rule: " .. condition["label"])
+			end
+		end
 	end
 end
 
@@ -420,45 +456,62 @@ local function toogle_widget_sens(widget, value)
 	widget.sensitive = value
 end
 
-for i = 1, 5 do
+for i, condition in pairs(T_METADATA_CONDITIONS) do
 	t_widgets_metadata_rules[i] = {
-		entry = dt.new_widget("entry")({}),
-		combobox = dt.new_widget("combobox")({
-			table.unpack(METADATA_KEYS),
-		}),
+		entry = dt.new_widget("entry"){},
+		combobox = dt.new_widget("combobox"){
+			table.unpack(T_METADATA_KEYS)
+		}
 	}
-	t_widgets_metadata_rules[i].box = dt.new_widget("box")({
+	t_widgets_metadata_rules[i]["box"]= dt.new_widget("box"){
 		orientation = "horizontal",
-		dt.new_widget("check_button")({
+		dt.new_widget("check_button"){
 			value = true,
-			label = i .. utf8.char(0x2605),
+			label = condition["label"],
 			clicked_callback = function (self)
 				toogle_widget_sens(t_widgets_metadata_rules[i].combobox, self.value)
 				toogle_widget_sens(t_widgets_metadata_rules[i].entry, self.value)
 			end
-		}),
+		},
 		t_widgets_metadata_rules[i].combobox,
 		t_widgets_metadata_rules[i].entry
-	})
+	}
 end
-
-local t_boxes = {}
+local t_widgets_metadata_rules_box = {}
 for _, v in pairs(t_widgets_metadata_rules) do
-	table.insert(t_boxes, v.box)
+	table.insert(t_widgets_metadata_rules_box, v.box)
 end
--- metadata box
-mGa.widgets.metadata_box = dt.new_widget("box")({
+-- metadata rules box
+mGa.widgets.metadata_rules_box = dt.new_widget("box"){
 	orientation = "vertical",
-	dt.new_widget("section_label")({
+	dt.new_widget("section_label"){
 		label = "Metadata",
-	}),
-	table.unpack(t_boxes),
-})
+	},
+	table.unpack(t_widgets_metadata_rules_box),
+}
+-- metadata action button: Selection
+mGa.widgets.metadata_action_selection_btn = dt.new_widget("button"){
+	label = _("Selection: apply"),
+	clicked_callback = function (_)
+		set_annex_metadata(dt.gui.selection())
+	end
+}
+-- metadata action button: Collection
+mGa.widgets.metadata_action_collection_btn = dt.new_widget("button"){
+	label = _("Collection: apply")
+}
+-- metadata action button box
+mGa.widgets.metadata_action_box = dt.new_widget("box"){
+	orientation = "horizontal",
+	mGa.widgets.metadata_action_selection_btn,
+	mGa.widgets.metadata_action_collection_btn
+}
 -- main box
 mGa.widgets.main_box = dt.new_widget("box")({
 	mGa.widgets.action_box,
 	mGa.widgets.sync_box,
-	mGa.widgets.metadata_box,
+	mGa.widgets.metadata_rules_box,
+	mGa.widgets.metadata_action_box
 })
 
 -- ... and tell dt about it all
