@@ -24,7 +24,8 @@ local T_OPERATORS = {
 }
 
 local T_IMAGE_PROPS = {
-	["rating"] = function (image) return image.rating end
+	["rating"] = function (image) return image.rating end,
+	-- ["tag"] = function (image) return image.get_tags end,
 }
 
 local T_METADATA_CONDITIONS = {
@@ -64,16 +65,6 @@ local function match_metadata_condition (condition, image)
 	local prop = T_IMAGE_PROPS[condition["image_prop"]](image)
 	local value = condition["value"]
 	return T_OPERATORS[condition["op"]](prop, value)
-end
-
-local function set_annex_metadata(...)
-	for _, image in pairs(...) do 
-		for i, condition in pairs(T_METADATA_CONDITIONS) do
-			if match_metadata_condition(condition, image) then
-				print("match for image: " .. image.filename .. " rule: " .. condition["label"])
-			end
-		end
-	end
 end
 
 local function set_tags(image, here)
@@ -128,6 +119,28 @@ function shell.popen(...)
 end
 
 -- end borrowed
+
+local function set_annex_metadata(metadata_widget_box, ...)
+	for _, image in pairs(...) do 
+		for i, condition in pairs(T_METADATA_CONDITIONS) do
+			local active = metadata_widget_box[i][1].value
+			local prop = metadata_widget_box[i][2].value
+			local value = metadata_widget_box[i][3].text
+			if active and not (value == "") then
+				if match_metadata_condition(condition, image) then
+					dt.print(image.filename .. ": apply metadata" .. prop .. "=" .. value)
+					local result = shell.execute({"git", "-C", image.path, "annex", "metadata",
+					image.filename, "-s", prop.."="..value}) 
+					if result then 
+						dt.print(image.filename .. ": apply metadata ok")
+					else
+						dt.print(image.filename .. ": apply metadata failed")
+					end
+				end
+			end
+		end
+	end
+end
 
 local function annex_rootdir(image)
 	local f_annex_rootdir = shell.popen({ "git", "-C", image.path, "rev-parse", "--show-toplevel" })
@@ -458,8 +471,8 @@ end
 
 for i, condition in pairs(T_METADATA_CONDITIONS) do
 	t_widgets_metadata_rules[i] = {
-		entry = dt.new_widget("entry"){},
-		combobox = dt.new_widget("combobox"){
+		[ "entry" ] = dt.new_widget("entry"){},
+		[ "combobox" ] = dt.new_widget("combobox"){
 			table.unpack(T_METADATA_KEYS)
 		}
 	}
@@ -493,12 +506,15 @@ mGa.widgets.metadata_rules_box = dt.new_widget("box"){
 mGa.widgets.metadata_action_selection_btn = dt.new_widget("button"){
 	label = _("Selection: apply"),
 	clicked_callback = function (_)
-		set_annex_metadata(dt.gui.selection())
+		set_annex_metadata(t_widgets_metadata_rules_box, dt.gui.selection())
 	end
 }
 -- metadata action button: Collection
 mGa.widgets.metadata_action_collection_btn = dt.new_widget("button"){
-	label = _("Collection: apply")
+	label = _("Collection: apply"),
+	clicked_callback = function (_)
+		set_annex_metadata(t_widgets_metadata_rules_box, dt.collection)
+	end
 }
 -- metadata action button box
 mGa.widgets.metadata_action_box = dt.new_widget("box"){
@@ -566,8 +582,10 @@ end, "git annex: status")
 dt.register_event("image selection changed", "selection-changed", function()
 	if next(dt.gui.selection()) == nil then
 		mGa.widgets.selection_box.sensitive = false
+		mGa.widgets.metadata_action_selection_btn.sensitive = false
 	else
 		mGa.widgets.selection_box.sensitive = true
+		mGa.widgets.metadata_action_selection_btn.sensitive = true
 	end
 end)
 
