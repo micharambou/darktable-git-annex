@@ -21,20 +21,35 @@ local T_OPERATORS = {
 	["="] = function (x, y) return x == y end,
 	[">"] = function (x, y) return x > y end,
 	["<"] = function (x, y) return x < y end,
+	["attached"] = function (x, y) 
+		local attached = false
+		for _, tag in pairs(x) do
+			if tag.name == y then 
+				attached = true
+				break
+			end
+		end
+		return attached
+	end
 }
 
 local T_IMAGE_PROPS = {
 	["rating"] = function (image) return image.rating end,
-	-- ["tag"] = function (image) return image.get_tags end,
+	["tag"] = function (image) return image.get_tags(image) end,
+}
+
+T_UTF8CHARS = {
+	["star"] = utf8.char(0x2605),
+	["reject"] = utf8.char(0x29BB),
+	["tag"] = utf8.char(0x0001F3F7)
 }
 
 local T_METADATA_CONDITIONS = {
-	{ ["label"] = "1" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 1 },
-	{ ["label"] = "2" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 2 },
-	{ ["label"] = "3" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 3 },
-	{ ["label"] = "4" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 4 },
-	{ ["label"] = "5" .. utf8.char(0x2605), ["image_prop"] = "rating", ["op"] = "=", ["value"] = 5 },
-	{ ["label"] = "reject", ["image_prop"] = "rating", ["op"] = "=", ["value"] = -1 },
+	{ ["label"] = "1" .. T_UTF8CHARS["star"], ["description"] = "Rating = " .. T_UTF8CHARS["star"], ["image_prop"] = "rating", ["op"] = "=", ["value"] = 1 },
+	{ ["label"] = "2" .. T_UTF8CHARS["star"], ["description"] = "Rating = " .. T_UTF8CHARS["star"] .. T_UTF8CHARS["star"], ["image_prop"] = "rating", ["op"] = "=", ["value"] = 2 },
+	{ ["label"] = "3" .. T_UTF8CHARS["star"], ["description"] = "Rating = " .. T_UTF8CHARS["star"] .. T_UTF8CHARS["star"] .. T_UTF8CHARS["star"], ["image_prop"] = "rating", ["op"] = "=", ["value"] = 3 },
+	{ ["label"] = T_UTF8CHARS["reject"], ["description"] = "Rejected Images", ["image_prop"] = "rating", ["op"] = "=", ["value"] = -1 },
+	{ ["label"] = T_UTF8CHARS["tag"], ["description"] = "Tag attached: private", ["image_prop"] = "tag", ["op"] = "attached", ["value"] = "private" },
 }
 
 -- preferences
@@ -481,6 +496,7 @@ for i, condition in pairs(T_METADATA_CONDITIONS) do
 		dt.new_widget("check_button"){
 			value = true,
 			label = condition["label"],
+			tooltip = condition["description"],
 			clicked_callback = function (self)
 				toogle_widget_sens(t_widgets_metadata_rules[i].combobox, self.value)
 				toogle_widget_sens(t_widgets_metadata_rules[i].entry, self.value)
@@ -586,7 +602,11 @@ dt.register_event("image selection changed", "selection-changed", function()
 	else
 		mGa.widgets.selection_box.sensitive = true
 		mGa.widgets.metadata_action_selection_btn.sensitive = true
+		for _, image in pairs(dt.gui.selection()) do
+		end
 	end
 end)
+
+
 
 return script_data
