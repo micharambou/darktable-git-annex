@@ -3,39 +3,41 @@ local function script_path()
 	return str:match("(.*/)")
 end
 
-package.path = package.path .. ";" .. script_path() .. "/?.lua"
+package.path = package.path .. ";" .. script_path() .. "lib/share/lua/5.4/?.lua"
 
 local dt = require("darktable")
 local du = require("lib/dtutils")
-local json = require("lib/dkjson")
--- local inspect = require("lib/inspect")
+local json = require("dkjson")
+local plstringx = require "pl.stringx"
+local pretty = require "pl.pretty"
 
 local MODULE = "git-annex"
 local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
+local PREF_METADATA_RULES = "metadata_rules"
 
 local T_METADATA_KEYS = {
 	"annex.numcopies"
 }
 
 local T_OPERATORS = {
-	["="] = function (x, y) return x == y end,
-	[">"] = function (x, y) return x > y end,
-	["<"] = function (x, y) return x < y end,
-	["attached"] = function (x, y) 
+	["="] = function(x, y) return x == tonumber(y) end,
+	[">"] = function(x, y) return x > tonumber(y) end,
+	["<"] = function(x, y) return x < tonumber(y) end,
+	["attached"] = function(x, y)
 		local attached = false
 		for _, tag in pairs(x) do
-			if tag.name == y then 
+			if tag.name == y then
 				attached = true
 				break
 			end
 		end
 		return attached
-	end
+	end,
 }
 
 local T_IMAGE_PROPS = {
-	["rating"] = function (image) return image.rating end,
-	["tag"] = function (image) return image.get_tags(image) end,
+	["rating"] = { ["f"] = function(image) return image.rating end, ["compat"] = {"=", ">", "<"} },
+	["tag"] = { ["f"] = function(image) return image.get_tags(image) end, ["compat"] = {"attached"} },
 }
 
 T_UTF8CHARS = {
@@ -43,25 +45,6 @@ T_UTF8CHARS = {
 	["reject"] = utf8.char(0x29BB),
 	["tag"] = utf8.char(0x0001F3F7)
 }
-
-local T_METADATA_CONDITIONS = {
-	{ ["label"] = "1" .. T_UTF8CHARS["star"], ["description"] = "Rating = " .. T_UTF8CHARS["star"], ["image_prop"] = "rating", ["op"] = "=", ["value"] = 1 },
-	{ ["label"] = "2" .. T_UTF8CHARS["star"], ["description"] = "Rating = " .. T_UTF8CHARS["star"] .. T_UTF8CHARS["star"], ["image_prop"] = "rating", ["op"] = "=", ["value"] = 2 },
-	{ ["label"] = "3" .. T_UTF8CHARS["star"], ["description"] = "Rating = " .. T_UTF8CHARS["star"] .. T_UTF8CHARS["star"] .. T_UTF8CHARS["star"], ["image_prop"] = "rating", ["op"] = "=", ["value"] = 3 },
-	{ ["label"] = T_UTF8CHARS["reject"], ["description"] = "Rejected Images", ["image_prop"] = "rating", ["op"] = "=", ["value"] = -1 },
-	{ ["label"] = T_UTF8CHARS["tag"], ["description"] = "Tag attached: private", ["image_prop"] = "tag", ["op"] = "attached", ["value"] = "private" },
-}
-
--- preferences
--- default sync directory
-dt.preferences.register(
-	MODULE,
-	PREF_SYNC_DEFAULT_DIR,
-	"directory",
-	"Git annex: default sync repository",
-	"A user defined repository to automatically add to sync directory list",
-	""
-)
 
 local function t_contains(t, value)
 	if next(t) == nil then
@@ -75,9 +58,170 @@ local function t_contains(t, value)
 		return false
 	end
 end
+local function purge_combobox(widget)
+	local entry_count = #widget
+	for i=1,entry_count,1 do 
+		widget[1] = nil
+	end
+end
+local function set_combobox_entries(widget, element_list, ...)
+	local i = 1
+	for _, element in pairs(element_list) do
+		if t_contains(..., element) then
+			widget[i] = element
+			i = i +1
+		end
+	end
+end
+local t_table_keys = function (t)
+	local t_keys = {}
+	for k, _ in pairs(t) do 
+		table.insert(t_keys, k)
+	end
+	return t_keys
+end
 
-local function match_metadata_condition (condition, image)
-	local prop = T_IMAGE_PROPS[condition["image_prop"]](image)
+local function str_table_keys(t)
+	local t_keys = {}
+	local return_string = [[]]
+	for k, _ in pairs(t) do
+		table.insert(t_keys, k)
+		return_string =
+			[[
+]] .. return_string .. [[
+- ]] .. k .. [[
+
+]]
+	end
+	return return_string
+end
+
+PREF_METADATA_RULES_DEFAULT =
+[[label=1%star%,description='Rating = %star%',image_prop=rating,op=%=%,value=1
+label=%tag%,description='tag attached: private',image_prop=tag,op=%attached%,value='private']]
+
+local PREF_METADATA_RULES_TOOLTIP =
+	[[
+- fields: label, description, image_prop, op, value
+		- label: string displayed in module next to check button
+		- description: string - tooltip for label
+		- image_prop: property of image to compare (see below)
+		- operator: comparison operator (see below)
+		- value: the comparison value
+- UTF8CHARS enclosed with %%, e.g. %label% or %star%
+
+=========
+operators
+=========
+]] .. str_table_keys(T_OPERATORS) .. [[
+==========
+utf8-chars
+==========
+]] .. str_table_keys(T_UTF8CHARS) .. [[
+================
+image properties
+================
+]] .. str_table_keys(T_IMAGE_PROPS) .. [[
+]]
+
+
+-- preferences
+-- default sync directory
+dt.preferences.register(
+	MODULE,
+	PREF_SYNC_DEFAULT_DIR,
+	"directory",
+	"Git annex: default sync repository",
+	"A user defined repository to automatically add to sync directory list",
+	""
+)
+
+MDRULE_PREFIX = ":mdrule:"
+local function get_metadata_pref_keys()
+	-- get all preference keys from dt that prefix with MDRULE_PREFIX
+	-- e.g.
+	-- 	lua/git-annex/metadata_rules:mdrule:1
+	--  lua/git-annex/metadata_rules:mdrule:2
+	local t = {}
+	for _, k in pairs(dt.preferences.get_keys()) do
+		if plstringx.startswith(k, "lua/" .. MODULE .. "/" .. PREF_METADATA_RULES .. MDRULE_PREFIX) then
+			table.insert(t, k)
+		end
+	end
+	return t
+end
+local function get_metadata_rules()
+	local t_metadata_rules = {}
+	if next(get_metadata_pref_keys()) == nil then
+		return ""
+	else
+		for _, k in pairs(get_metadata_pref_keys()) do
+			local _,_, prefix = table.unpack(plstringx.split(k, "/", 3))
+			table.insert(t_metadata_rules, dt.preferences.read(MODULE, prefix, "string"))
+		end
+		local str_metadata_rules = plstringx.join("\n", t_metadata_rules)
+		return str_metadata_rules
+	end
+end
+
+local function purge_metadata_preferences()
+	for _, k in pairs(get_metadata_pref_keys()) do
+		local _,_, prefix = table.unpack(plstringx.split(k, "/", 3))
+		dt.preferences.destroy(MODULE, prefix)
+	end
+end
+
+local function parse_pref_metadata_rule(s)
+	local t_metadata_rule_parsed = {}
+	local t_metadata_rule_parsed_string = {}
+	local t_words = plstringx.split(s, ",")
+	for _, v in pairs(t_words) do
+		-- replace utf8char placeholders with actual utf8char
+		for utf8_k, utf8_v in pairs(T_UTF8CHARS) do
+			v = plstringx.replace(v, "%" .. utf8_k .. "%", utf8_v)
+		end
+		table.insert(t_metadata_rule_parsed_string, v)
+	end
+	for _, w in pairs(t_metadata_rule_parsed_string) do
+		local field, value = table.unpack(plstringx.split(w, "=", 2))
+		do
+			t_metadata_rule_parsed[field] = value
+		end
+	end
+	-- replace string in op field with actual operator e.g. %=% -> =
+	t_metadata_rule_parsed.op = plstringx.replace(t_metadata_rule_parsed.op, "%", "")
+	-- replace surrounding quotation marks in value & description field e.g. 'private' -> private
+	t_metadata_rule_parsed.value = plstringx.replace(t_metadata_rule_parsed.value, "'", "")
+	t_metadata_rule_parsed.value = plstringx.replace(t_metadata_rule_parsed.value, '"', '')
+	t_metadata_rule_parsed.description = plstringx.replace(t_metadata_rule_parsed.description, "'", "")
+	t_metadata_rule_parsed.description = plstringx.replace(t_metadata_rule_parsed.description, '"', '')
+	return t_metadata_rule_parsed
+end
+
+-- parsed metadata rules prefs
+local t_metadata_rules_parsed = {}
+local str = get_metadata_rules()
+if not (str == nil or str == "") then
+	for line in plstringx.lines(str) do
+		table.insert(t_metadata_rules_parsed, parse_pref_metadata_rule(line))
+	end
+end
+-- write metadata rules to preferences
+local function write_metadata_rules_to_pref(t)
+	for i, condition in pairs(t) do
+		local str = plstringx.join(",", {
+			"label=".. condition["label"],
+			"description=" .. condition["description"],
+			"image_prop=" .. condition["image_prop"],
+			"op=%" .. condition["op"],
+			"value=" .. condition["value"]
+		})
+		dt.preferences.write(MODULE, PREF_METADATA_RULES .. MDRULE_PREFIX .. i, "string", str)
+	end
+end
+
+local function match_metadata_condition(condition, image)
+	local prop = T_IMAGE_PROPS[condition["image_prop"]].f(image)
 	local value = condition["value"]
 	return T_OPERATORS[condition["op"]](prop, value)
 end
@@ -136,17 +280,17 @@ end
 -- end borrowed
 
 local function set_annex_metadata(metadata_widget_box, ...)
-	for _, image in pairs(...) do 
-		for i, condition in pairs(T_METADATA_CONDITIONS) do
+	for _, image in pairs(...) do
+		for i, condition in pairs(t_metadata_rules_parsed) do
 			local active = metadata_widget_box[i][1].value
 			local prop = metadata_widget_box[i][2].value
 			local value = metadata_widget_box[i][3].text
 			if active and not (value == "") then
 				if match_metadata_condition(condition, image) then
 					dt.print(image.filename .. ": apply metadata" .. prop .. "=" .. value)
-					local result = shell.execute({"git", "-C", image.path, "annex", "metadata",
-					image.filename, "-s", prop.."="..value}) 
-					if result then 
+					local result = shell.execute({ "git", "-C", image.path, "annex", "metadata",
+						image.filename, "-s", prop .. "=" .. value })
+					if result then
 						dt.print(image.filename .. ": apply metadata ok")
 					else
 						dt.print(image.filename .. ": apply metadata failed")
@@ -269,24 +413,16 @@ end
 
 local sync_checkbox = true
 
-local function text2table(s)
-	local t = {}
-	for line in string.gmatch(s, "[^\r\n]+") do
-		table.insert(t, line)
-	end
-	return t
-end
-
 du.check_min_api_version("7.0.0", "darktable-git-annex module")
 
 -- return data structure for script_manager
 
 local script_data = {}
 
-script_data.destroy = nil -- function to destory the script
+script_data.destroy = nil        -- function to destory the script
 script_data.destroy_method = nil -- set to hide for libs since we can't destroy them commpletely yet, otherwise leave as nil
-script_data.restart = nil -- how to restart the (lib) script after it's been hidden - i.e. make it visible again
-script_data.show = nil -- only required for libs since the destroy_method only hides them
+script_data.restart = nil        -- how to restart the (lib) script after it's been hidden - i.e. make it visible again
+script_data.show = nil           -- only required for libs since the destroy_method only hides them
 
 -- translation
 
@@ -307,7 +443,7 @@ mGa.module_installed = false -- keep track of whether the module is module_insta
 
 -- sync function supposed to be called on startup and by button click
 local sync_btn_callback = function()
-	for _, line in pairs(text2table(mGa.widgets.syncdir_entry.text)) do
+	for _, line in pairs(plstringx.splitlines(mGa.widgets.syncdir_entry.text)) do
 		local syncdir = string.gsub(line, "\n", "")
 		local cmd = { "git", "-C", syncdir, "annex", "sync" }
 		if sync_checkbox then
@@ -327,10 +463,10 @@ local function install_module()
 	if not mGa.module_installed then
 		-- https://www.darktable.org/lua-api/index.html#darktable_register_lib
 		dt.register_lib(
-			"git annex module", -- Module name
-			"git annex module", -- name
-			true, -- expandable
-			false, -- resetable
+			"git annex module",                                                   -- Module name
+			"git annex module",                                                   -- name
+			true,                                                                 -- expandable
+			false,                                                                -- resetable
 			{ [dt.gui.views.lighttable] = { "DT_UI_CONTAINER_PANEL_RIGHT_CENTER", 100 } }, -- containers
 			-- https://www.darktable.org/lua-api/types_lua_box.html
 			mGa.widgets.main_box,
@@ -453,7 +589,7 @@ mGa.widgets.sync_scandb_btn = dt.new_widget("button")({
 				table.insert(t_rootdir, rootdir)
 			end
 		end
-		local t_syncdir_entry = text2table(mGa.widgets.syncdir_entry.text)
+		local t_syncdir_entry = plstringx.splitlines(mGa.widgets.syncdir_entry.text)
 		for k, v in pairs(t_rootdir) do
 			if not t_contains(t_syncdir_entry, v) then
 				mGa.widgets.syncdir_entry.text = string.format("%s\n%s", v, mGa.widgets.syncdir_entry.text)
@@ -478,26 +614,42 @@ mGa.widgets.sync_box = dt.new_widget("box")({
 		mGa.widgets.sync_content_check_btn,
 	}),
 })
+
+mGa.widgets.metadata_header_box = dt.new_widget("box") {
+	orientation = "vertical",
+	dt.new_widget("section_label") {
+		label = "Metadata",
+	},
+	dt.new_widget("combobox") {
+		"rules",
+		"settings",
+		editable = false,
+		changed_callback = function(self)
+			mGa.widgets.metadata_stack.active = self.selected
+		end
+	}
+}
+
 local t_widgets_metadata_rules = {}
 
 local function toogle_widget_sens(widget, value)
 	widget.sensitive = value
 end
 
-for i, condition in pairs(T_METADATA_CONDITIONS) do
+for i, condition in pairs(t_metadata_rules_parsed) do
 	t_widgets_metadata_rules[i] = {
-		[ "entry" ] = dt.new_widget("entry"){},
-		[ "combobox" ] = dt.new_widget("combobox"){
+		["entry"] = dt.new_widget("entry") {},
+		["combobox"] = dt.new_widget("combobox") {
 			table.unpack(T_METADATA_KEYS)
 		}
 	}
-	t_widgets_metadata_rules[i]["box"]= dt.new_widget("box"){
+	t_widgets_metadata_rules[i]["box"] = dt.new_widget("box") {
 		orientation = "horizontal",
-		dt.new_widget("check_button"){
+		dt.new_widget("check_button") {
 			value = true,
 			label = condition["label"],
 			tooltip = condition["description"],
-			clicked_callback = function (self)
+			clicked_callback = function(self)
 				toogle_widget_sens(t_widgets_metadata_rules[i].combobox, self.value)
 				toogle_widget_sens(t_widgets_metadata_rules[i].entry, self.value)
 			end
@@ -510,55 +662,195 @@ local t_widgets_metadata_rules_box = {}
 for _, v in pairs(t_widgets_metadata_rules) do
 	table.insert(t_widgets_metadata_rules_box, v.box)
 end
--- metadata rules box
-mGa.widgets.metadata_rules_box = dt.new_widget("box"){
-	orientation = "vertical",
-	dt.new_widget("section_label"){
-		label = "Metadata",
-	},
-	table.unpack(t_widgets_metadata_rules_box),
-}
 -- metadata action button: Selection
-mGa.widgets.metadata_action_selection_btn = dt.new_widget("button"){
+mGa.widgets.metadata_action_selection_btn = dt.new_widget("button") {
 	label = _("Selection: apply"),
-	clicked_callback = function (_)
+	clicked_callback = function(_)
 		set_annex_metadata(t_widgets_metadata_rules_box, dt.gui.selection())
 	end
 }
 -- metadata action button: Collection
-mGa.widgets.metadata_action_collection_btn = dt.new_widget("button"){
+mGa.widgets.metadata_action_collection_btn = dt.new_widget("button") {
 	label = _("Collection: apply"),
-	clicked_callback = function (_)
+	clicked_callback = function(_)
 		set_annex_metadata(t_widgets_metadata_rules_box, dt.collection)
 	end
 }
 -- metadata action button box
-mGa.widgets.metadata_action_box = dt.new_widget("box"){
+mGa.widgets.metadata_action_box = dt.new_widget("box") {
 	orientation = "horizontal",
 	mGa.widgets.metadata_action_selection_btn,
 	mGa.widgets.metadata_action_collection_btn
+}
+-- metadata rules box
+mGa.widgets.metadata_rules_box = dt.new_widget("box") {
+	orientation = "vertical",
+	mGa.widgets.metadata_action_box,
+	table.unpack(t_widgets_metadata_rules_box),
+}
+mGa.widgets.metadata_settings_text_view = dt.new_widget("text_view") {
+	editable = false,
+	tooltip = PREF_METADATA_RULES_TOOLTIP
+}
+mGa.widgets.metadata_settings_selection_combobox = dt.new_widget("combobox"){
+	label = "Select",
+	changed_callback = function (self)
+		if self.selected > 0 then
+			mGa.widgets.metadata_settings_text_view.text = plstringx.join("\n", {
+				"Label: " .. t_metadata_rules_parsed[self.selected]["label"],
+				"description: " .. t_metadata_rules_parsed[self.selected]["description"],
+				"property: " .. t_metadata_rules_parsed[self.selected]["image_prop"],
+				"operator: " .. t_metadata_rules_parsed[self.selected]["op"],
+				"value: " .. t_metadata_rules_parsed[self.selected]["value"]
+			})
+		else 
+			mGa.widgets.metadata_settings_text_view.text = ""
+		end
+	end
+}
+for i, condition in pairs(t_metadata_rules_parsed) do
+	mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
+end
+mGa.widgets.metadata_settings_selection_combobox.selected = 0
+mGa.widgets.metadata_settings_remove_btn = dt.new_widget("button") {
+	label = _("Delete"),
+	clicked_callback = function (_)
+		local id = mGa.widgets.metadata_settings_selection_combobox.selected
+		table.remove(t_metadata_rules_parsed, id)
+		pretty(t_metadata_rules_parsed)
+		purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
+		for i, condition in pairs(t_metadata_rules_parsed) do
+			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
+		end
+		mGa.widgets.metadata_settings_text_view.text = ""
+		mGa.widgets.metadata_settings_selection_combobox.selected = 0
+	end
+}
+mGa.widgets.metadata_settings_edit_description_entry = dt.new_widget("entry"){
+	placeholder = "description"
+}
+mGa.widgets.metadata_settings_edit_label_entry = dt.new_widget("entry"){
+	placeholder = "label "
+}
+mGa.widgets.metadata_settings_edit_label_description_box = dt.new_widget("box"){
+	orientation = "horizontal",
+	mGa.widgets.metadata_settings_edit_label_entry,
+	mGa.widgets.metadata_settings_edit_description_entry,
+}
+mGa.widgets.metadata_settings_edit_op_combobox = dt.new_widget("combobox"){
+	label = "operator",
+}
+mGa.widgets.metadata_settings_edit_image_prop_combobox = dt.new_widget("combobox"){
+	label = "property",
+	changed_callback = function (self)
+		purge_combobox(mGa.widgets.metadata_settings_edit_op_combobox)
+		set_combobox_entries(mGa.widgets.metadata_settings_edit_op_combobox, t_table_keys(T_OPERATORS), T_IMAGE_PROPS[self.value].compat)
+	end,
+	table.unpack(t_table_keys(T_IMAGE_PROPS)),
+}
+set_combobox_entries(
+	mGa.widgets.metadata_settings_edit_op_combobox,
+	t_table_keys(T_OPERATORS), 
+	T_IMAGE_PROPS[mGa.widgets.metadata_settings_edit_image_prop_combobox.value].compat
+)
+mGa.widgets.metadata_settings_edit_value_entry = dt.new_widget("entry"){
+	placeholder = "value"
+}
+mGa.widgets.metadata_settings_apply_btn = dt.new_widget("button") {
+	label = _("Apply (Restart to take effect)"),
+	clicked_callback = function(_)
+		purge_metadata_preferences()
+		write_metadata_rules_to_pref(t_metadata_rules_parsed)
+		dt.print("Metadata rules applied, please restart dt")
+	end
+}
+mGa.widgets.metadata_settings_edit_params_box = dt.new_widget("box"){
+	orientation = "horizontal",
+	mGa.widgets.metadata_settings_edit_image_prop_combobox,
+	mGa.widgets.metadata_settings_edit_op_combobox,
+	dt.new_widget("separator"){
+		orientation = "horizontal"
+	},
+	mGa.widgets.metadata_settings_edit_value_entry
+}
+mGa.widgets.metadata_settings_edit_add_btn = dt.new_widget("button"){
+	label = _("add"),
+	clicked_callback = function (_)
+		local str = plstringx.join(",",{
+			"label=" .. mGa.widgets.metadata_settings_edit_label_entry.text,
+			"description=" .. mGa.widgets.metadata_settings_edit_description_entry.text,
+			"image_prop=" .. mGa.widgets.metadata_settings_edit_image_prop_combobox.value,
+			"op=" .. mGa.widgets.metadata_settings_edit_op_combobox.value,
+			"value=" .. mGa.widgets.metadata_settings_edit_value_entry.text
+			}
+		)
+		table.insert(t_metadata_rules_parsed, parse_pref_metadata_rule(str))
+		purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
+		for i, condition in pairs(t_metadata_rules_parsed) do
+			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"]
+		end
+		mGa.widgets.metadata_settings_selection_combobox.selected = 0
+	end
+}
+mGa.widgets.metadata_settings_edit_box = dt.new_widget("box"){
+	orientation = "vertical",
+	mGa.widgets.metadata_settings_edit_label_description_box,
+	mGa.widgets.metadata_settings_edit_params_box,
+	mGa.widgets.metadata_settings_edit_add_btn,
+}
+mGa.widgets.metadata_settings_info_text_view = dt.new_widget("text_view") {
+	editable = false,
+	text = PREF_METADATA_RULES_TOOLTIP
+}
+mGa.widgets.metadata_settings_stack = dt.new_widget("stack"){
+	v_size_fixed = false,
+	h_size_fixed = false,
+	mGa.widgets.metadata_settings_edit_box,
+	mGa.widgets.metadata_settings_info_text_view,
+}
+mGa.widgets.metadata_settings_combobox = dt.new_widget("combobox"){
+	"edit",
+	"help",
+	changed_callback = function (self)
+		mGa.widgets.metadata_settings_stack.active = self.selected
+	end
+}
+mGa.widgets.metadata_settings_box = dt.new_widget("box") {
+	orientation = "vertical",
+	mGa.widgets.metadata_settings_selection_combobox,
+	mGa.widgets.metadata_settings_text_view,
+	mGa.widgets.metadata_settings_remove_btn,
+	mGa.widgets.metadata_settings_apply_btn,
+	mGa.widgets.metadata_settings_combobox,
+	mGa.widgets.metadata_settings_stack
+}
+mGa.widgets.metadata_stack = dt.new_widget("stack") {
+	v_size_fixed = false,
+	h_size_fixed = false,
+	mGa.widgets.metadata_rules_box,
+	mGa.widgets.metadata_settings_box,
 }
 -- main box
 mGa.widgets.main_box = dt.new_widget("box")({
 	mGa.widgets.action_box,
 	mGa.widgets.sync_box,
-	mGa.widgets.metadata_rules_box,
-	mGa.widgets.metadata_action_box
+	mGa.widgets.metadata_header_box,
+	mGa.widgets.metadata_stack,
 })
 
 -- ... and tell dt about it all
 
 if dt.gui.current_view().id == "lighttable" then -- make sure we are in lighttable view
-	install_module() -- register the lib
+	install_module()                             -- register the lib
 else
-	if not mGa.event_registered then -- if we are not in lighttable view then register an event to signal when we might be
+	if not mGa.event_registered then             -- if we are not in lighttable view then register an event to signal when we might be
 		-- https://www.darktable.org/lua-api/index.html#darktable_register_event
 		dt.register_event(
 			"git annex module",
-			"view-changed", -- we want to be informed when the view changes
+			"view-changed",                                               -- we want to be informed when the view changes
 			function(event, old_view, new_view)
 				if new_view.name == "lighttable" and old_view.name == "darkroom" then -- if the view changes from darkroom to lighttable
-					install_module() -- register the lib
+					install_module()                                      -- register the lib
 				end
 			end
 		)
@@ -570,9 +862,11 @@ end
 -- it's time to destroy the script and then return the data to
 -- script_manager
 script_data.destroy = destroy
-script_data.restart = restart -- only required for lib modules until we figure out how to destroy them
-script_data.destroy_method = "hide" -- tell script_manager that we are hiding the lib so it knows to use the restart function
-script_data.show = restart -- if the script was "off" when darktable exited, the module is hidden, so force it to show on start
+script_data.restart = restart       -- only required for lib modules until we figure out how to destroy them
+script_data.destroy_method =
+"hide"                              -- tell script_manager that we are hiding the lib so it knows to use the restart function
+script_data.show =
+restart                             -- if the script was "off" when darktable exited, the module is hidden, so force it to show on start
 
 -- add
 dt.register_event("git annex add", "shortcut", function()
@@ -602,8 +896,6 @@ dt.register_event("image selection changed", "selection-changed", function()
 	else
 		mGa.widgets.selection_box.sensitive = true
 		mGa.widgets.metadata_action_selection_btn.sensitive = true
-		for _, image in pairs(dt.gui.selection()) do
-		end
 	end
 end)
 

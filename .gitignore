@@ -1,0 +1,5 @@
+/lib/luarocks
+/lib/lua
+/lua_modules
+/.luarocks
+/lib/lib
