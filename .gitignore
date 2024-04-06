@@ -10,3 +10,4 @@
 !/lib/share/lua/5.4/pl/utils.lua
 !/lib/share/lua/5.4/pl/types.lua
 !/lib/share/lua/5.4/pl/lexer.lua
+!/lib/share/lua/5.4/pl/compat.lua
