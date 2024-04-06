@@ -3,3 +3,9 @@
 /lua_modules
 /.luarocks
 /lib/lib
+/lib/share/lua/5.4/pl
+!/lib/share/lua/5.4/pl/stringx.lua
+!/lib/share/lua/5.4/pl/pretty.lua
+!/lib/share/lua/5.4/pl/utils.lua
+!/lib/share/lua/5.4/pl/types.lua
+!/lib/share/lua/5.4/pl/lexer.lua
