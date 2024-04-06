@@ -13,3 +13,6 @@ lua
 !/lib/share/lua/5.4/pl/types.lua
 !/lib/share/lua/5.4/pl/lexer.lua
 !/lib/share/lua/5.4/pl/compat.lua
+!/lib/share/lua/5.4/pl/List.lua
+!/lib/share/lua/5.4/pl/class.lua
+!/lib/share/lua/5.4/pl/tablex.lua
