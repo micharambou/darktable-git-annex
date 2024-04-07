@@ -27,15 +27,13 @@ Installation
 
 * open `action` `install/update scripts`
 * in the URL box enter `https://github.com/micharambou/darktable-git-annex.git`
-* in the category box enter `micharambou`
+* in the category box enter `dt-git-annex`
 * click the `Install additional scripts` button
 
 ### Manually
 
 * change to your lua scripts directory, `~/.config/darktable/lua/`
-* enter the command `git clone https://github.com/micharambou/darktable-git-annex.git micharambou`
-* enter the command `echo 'require "micharambou/git-annex"' >> luarc`
-
+* enter the command `git clone https://github.com/micharambou/darktable-git-annex.git dt-git-annex`
 
 [git annex]: https://git-annex.branchable.com/
 [darktable]: http://www.darktable.org/

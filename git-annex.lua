@@ -780,14 +780,16 @@ mGa.widgets.metadata_settings_selection_combobox.selected = 0
 mGa.widgets.metadata_settings_remove_btn = dt.new_widget("button") {
 	label = _("Delete"),
 	clicked_callback = function (_)
-		local id = mGa.widgets.metadata_settings_selection_combobox.selected
-		table.remove(t_metadata_rules_parsed, id)
-		purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
-		for i, condition in pairs(t_metadata_rules_parsed) do
-			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
+		local rule_selected = mGa.widgets.metadata_settings_selection_combobox.selected
+		if rule_selected > 0 then 
+			table.remove(t_metadata_rules_parsed, rule_selected)
+			purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
+			for i, condition in pairs(t_metadata_rules_parsed) do
+				mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
+			end
+			clear_edit_form(mGa)
+			mGa.widgets.metadata_settings_selection_combobox.selected = 0
 		end
-		clear_edit_form(mGa)
-		mGa.widgets.metadata_settings_selection_combobox.selected = 0
 	end
 }
 mGa.widgets.metadata_settings_edit_description_entry = dt.new_widget("entry"){
