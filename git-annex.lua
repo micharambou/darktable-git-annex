@@ -16,13 +16,17 @@ local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
 local PREF_METADATA_RULES = "metadata_rules"
 
 local T_METADATA_KEYS = {
-	"annex.numcopies"
+	"annex.numcopies",
+	"author",
+	"tag",
 }
 
 local T_OPERATORS = {
 	["="] = function(x, y) return x == tonumber(y) end,
 	[">"] = function(x, y) return x > tonumber(y) end,
+	[">="] = function(x, y) return x >= tonumber(y) end,
 	["<"] = function(x, y) return x < tonumber(y) end,
+	["<="] = function(x, y) return x <= tonumber(y) end,
 	["attached"] = function(x, y)
 		local attached = false
 		for _, tag in pairs(x) do
@@ -33,11 +37,14 @@ local T_OPERATORS = {
 		end
 		return attached
 	end,
+	["is"] = function (x, y) return tostring(x) == y end,
+	["is not"] = function (x, y) return tostring(x) ~= y end,
 }
 
 local T_IMAGE_PROPS = {
-	["rating"] = { ["f"] = function(image) return image.rating end, ["compat"] = {"=", ">", "<"} },
+	["rating"] = { ["f"] = function(image) return image.rating end, ["compat"] = {"=", ">", "<" ,">=", "<="} },
 	["tag"] = { ["f"] = function(image) return image.get_tags(image) end, ["compat"] = {"attached"} },
+	["altered"] = { ["f"] = function(image) return image.is_altered end, ["compat"] = {"is", "is not"} },
 }
 
 T_UTF8CHARS = {
