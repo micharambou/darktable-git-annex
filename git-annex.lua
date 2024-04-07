@@ -60,8 +60,10 @@ local function t_contains(t, value)
 end
 local function purge_combobox(widget)
 	local entry_count = #widget
-	for i=1,entry_count,1 do 
-		widget[1] = nil
+	if entry_count > 0 then
+		for i=1,entry_count,1 do 
+			widget[1] = nil
+		end
 	end
 end
 local function set_combobox_entries(widget, element_list, ...)
@@ -71,6 +73,17 @@ local function set_combobox_entries(widget, element_list, ...)
 			widget[i] = element
 			i = i +1
 		end
+	end
+end
+local function select_combobox_entry_by_value(widget, value)
+	local entry_count = #widget
+	local match = false
+	for i=1, entry_count,1 do
+		if widget[i] == value then
+			widget.selected = i
+			match = true
+		end
+		if match then break end
 	end
 end
 local t_table_keys = function (t)
@@ -94,6 +107,33 @@ local function str_table_keys(t)
 ]]
 	end
 	return return_string
+end
+
+local function update_edit_form(mGa, t_metadata_rules_parsed, rule_selected)
+	-- dirty hack: misuse image.prop_combox.name as shared value to indicate desired target value for operator combobox
+	mGa.widgets.metadata_settings_edit_image_prop_combobox.name = t_metadata_rules_parsed[rule_selected]["op"]
+	select_combobox_entry_by_value(mGa.widgets.metadata_settings_edit_image_prop_combobox, t_metadata_rules_parsed[rule_selected]["image_prop"])
+	mGa.widgets.metadata_settings_edit_label_entry.text = t_metadata_rules_parsed[rule_selected]["label"]
+	mGa.widgets.metadata_settings_edit_description_entry.text = t_metadata_rules_parsed[rule_selected]["description"]
+	mGa.widgets.metadata_settings_edit_value_entry.text = t_metadata_rules_parsed[rule_selected]["value"]
+	if mGa.widgets.metadata_settings_combobox.selected == 2 then
+		mGa.widgets.metadata_settings_edit_add_btn.label = "modify"
+		mGa.widgets.metadata_settings_edit_add_btn.name = rule_selected
+	end
+	if mGa.widgets.metadata_settings_combobox.selected == 1 then
+		mGa.widgets.metadata_settings_edit_add_btn.label = "add"
+		mGa.widgets.metadata_settings_edit_add_btn.name = nil
+	end
+end
+local function clear_edit_form(mGa)
+	mGa.widgets.metadata_settings_stack.active = 1
+	mGa.widgets.metadata_settings_edit_image_prop_combobox.selected = 0
+	mGa.widgets.metadata_settings_edit_op_combobox.selected = 0
+	mGa.widgets.metadata_settings_edit_label_entry.text = ""
+	mGa.widgets.metadata_settings_edit_description_entry.text = ""
+	mGa.widgets.metadata_settings_edit_value_entry.text = ""
+	mGa.widgets.metadata_settings_edit_add_btn.label = "add"
+	mGa.widgets.metadata_settings_edit_add_btn.name = nil
 end
 
 PREF_METADATA_RULES_DEFAULT =
@@ -126,7 +166,7 @@ image properties
 
 
 -- preferences
--- default sync directory
+-- default sync directory 
 dt.preferences.register(
 	MODULE,
 	PREF_SYNC_DEFAULT_DIR,
@@ -152,10 +192,12 @@ local function get_metadata_pref_keys()
 end
 local function get_metadata_rules()
 	local t_metadata_rules = {}
-	if next(get_metadata_pref_keys()) == nil then
+	local t = get_metadata_pref_keys()
+	table.sort(t)
+	if next(t) == nil then
 		return ""
 	else
-		for _, k in pairs(get_metadata_pref_keys()) do
+		for _, k in pairs(t) do
 			local _,_, prefix = table.unpack(plstringx.split(k, "/", 3))
 			table.insert(t_metadata_rules, dt.preferences.read(MODULE, prefix, "string"))
 		end
@@ -703,6 +745,9 @@ mGa.widgets.metadata_settings_selection_combobox = dt.new_widget("combobox"){
 				"operator: " .. t_metadata_rules_parsed[self.selected]["op"],
 				"value: " .. t_metadata_rules_parsed[self.selected]["value"]
 			})
+			if mGa.widgets.metadata_settings_combobox.selected == 2 then
+				update_edit_form(mGa, t_metadata_rules_parsed, self.selected)
+			end
 		else 
 			mGa.widgets.metadata_settings_text_view.text = ""
 		end
@@ -717,12 +762,11 @@ mGa.widgets.metadata_settings_remove_btn = dt.new_widget("button") {
 	clicked_callback = function (_)
 		local id = mGa.widgets.metadata_settings_selection_combobox.selected
 		table.remove(t_metadata_rules_parsed, id)
-		pretty(t_metadata_rules_parsed)
 		purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
 		for i, condition in pairs(t_metadata_rules_parsed) do
 			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
 		end
-		mGa.widgets.metadata_settings_text_view.text = ""
+		clear_edit_form(mGa)
 		mGa.widgets.metadata_settings_selection_combobox.selected = 0
 	end
 }
@@ -742,9 +786,18 @@ mGa.widgets.metadata_settings_edit_op_combobox = dt.new_widget("combobox"){
 }
 mGa.widgets.metadata_settings_edit_image_prop_combobox = dt.new_widget("combobox"){
 	label = "property",
+	name = nil,
 	changed_callback = function (self)
+		-- clean up operator combobox
 		purge_combobox(mGa.widgets.metadata_settings_edit_op_combobox)
-		set_combobox_entries(mGa.widgets.metadata_settings_edit_op_combobox, t_table_keys(T_OPERATORS), T_IMAGE_PROPS[self.value].compat)
+		-- set op combobox values with matching values unless no selection is done
+		if self.selected > 0 then 
+			set_combobox_entries(mGa.widgets.metadata_settings_edit_op_combobox, t_table_keys(T_OPERATORS), T_IMAGE_PROPS[self.value].compat)
+			if not (self.name == nil) then
+				select_combobox_entry_by_value(mGa.widgets.metadata_settings_edit_op_combobox, self.name)
+				self.name = nil
+			end
+		end
 	end,
 	table.unpack(t_table_keys(T_IMAGE_PROPS)),
 }
@@ -774,21 +827,27 @@ mGa.widgets.metadata_settings_edit_params_box = dt.new_widget("box"){
 	mGa.widgets.metadata_settings_edit_value_entry
 }
 mGa.widgets.metadata_settings_edit_add_btn = dt.new_widget("button"){
+	name = nil,
 	label = _("add"),
-	clicked_callback = function (_)
+	clicked_callback = function (self)
 		local str = plstringx.join(",",{
-			"label=" .. mGa.widgets.metadata_settings_edit_label_entry.text,
-			"description=" .. mGa.widgets.metadata_settings_edit_description_entry.text,
-			"image_prop=" .. mGa.widgets.metadata_settings_edit_image_prop_combobox.value,
-			"op=" .. mGa.widgets.metadata_settings_edit_op_combobox.value,
-			"value=" .. mGa.widgets.metadata_settings_edit_value_entry.text
-			}
-		)
-		table.insert(t_metadata_rules_parsed, parse_pref_metadata_rule(str))
+		"label=" .. mGa.widgets.metadata_settings_edit_label_entry.text,
+		"description=" .. mGa.widgets.metadata_settings_edit_description_entry.text,
+		"image_prop=" .. mGa.widgets.metadata_settings_edit_image_prop_combobox.value,
+		"op=" .. mGa.widgets.metadata_settings_edit_op_combobox.value,
+		"value=" .. mGa.widgets.metadata_settings_edit_value_entry.text
+		})
+		if self.label == "add" then
+			table.insert(t_metadata_rules_parsed, parse_pref_metadata_rule(str))
+		end
+		if self.label == "modify" then
+			t_metadata_rules_parsed[tonumber(self.name)] = parse_pref_metadata_rule(str)
+		end
 		purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
 		for i, condition in pairs(t_metadata_rules_parsed) do
-			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"]
+			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
 		end
+		clear_edit_form(mGa)
 		mGa.widgets.metadata_settings_selection_combobox.selected = 0
 	end
 }
@@ -809,10 +868,27 @@ mGa.widgets.metadata_settings_stack = dt.new_widget("stack"){
 	mGa.widgets.metadata_settings_info_text_view,
 }
 mGa.widgets.metadata_settings_combobox = dt.new_widget("combobox"){
+	"new",
 	"edit",
 	"help",
 	changed_callback = function (self)
-		mGa.widgets.metadata_settings_stack.active = self.selected
+		-- selected new
+		if self.selected == 1 then
+			clear_edit_form(mGa)
+		end
+		-- selected help
+		if self.selected == 3 then
+			mGa.widgets.metadata_settings_stack.active = 2
+		end
+		-- selected edit
+		if self.selected == 2 then
+			mGa.widgets.metadata_settings_stack.active = 1
+			local rule_selected = mGa.widgets.metadata_settings_selection_combobox.selected
+			if rule_selected > 0 then
+				update_edit_form(mGa, t_metadata_rules_parsed, rule_selected)
+				mGa.widgets.metadata_settings_edit_add_btn.name = mGa.widgets.metadata_settings_selection_combobox.selected
+			end
+		end
 	end
 }
 mGa.widgets.metadata_settings_box = dt.new_widget("box") {
