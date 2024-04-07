@@ -10,6 +10,7 @@ local du = require("lib/dtutils")
 local json = require("dkjson")
 local plstringx = require "pl.stringx"
 local pretty = require "pl.pretty"
+local validation = require "resty.validation"
 
 local MODULE = "git-annex"
 local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
@@ -42,9 +43,21 @@ local T_OPERATORS = {
 }
 
 local T_IMAGE_PROPS = {
-	["rating"] = { ["f"] = function(image) return image.rating end, ["compat"] = {"=", ">", "<" ,">=", "<="} },
-	["tag"] = { ["f"] = function(image) return image.get_tags(image) end, ["compat"] = {"attached"} },
-	["altered"] = { ["f"] = function(image) return image.is_altered end, ["compat"] = {"is", "is not"} },
+	["rating"] = { 
+		["f"] = function(image) return image.rating end,
+		["compat"] = {"=", ">", "<" ,">=", "<="},
+		["valid"] = function (x) local r, _ = validation.number:between(-1, 5)(tonumber(x)) return r end
+	},
+	["tag"] = {
+		["f"] = function(image) return image.get_tags(image) end, 
+		["compat"] = {"attached"},
+		["valid"] = function (x) local r, _ = validation:minlen(1)(x) return r end
+	},
+	["altered"] = { 
+		["f"] = function(image) return image.is_altered end, 
+		["compat"] = {"is", "is not"},
+		["valid"] = function (x) local r, _ = validation:oneof("true", "false")(string.lower(x)) return r end
+	},
 }
 
 T_UTF8CHARS = {
@@ -844,6 +857,13 @@ mGa.widgets.metadata_settings_edit_add_btn = dt.new_widget("button"){
 		"op=" .. mGa.widgets.metadata_settings_edit_op_combobox.value,
 		"value=" .. mGa.widgets.metadata_settings_edit_value_entry.text
 		})
+		-- validate input value of value entry first
+		if not 
+		T_IMAGE_PROPS[mGa.widgets.metadata_settings_edit_image_prop_combobox.value]
+		.valid(mGa.widgets.metadata_settings_edit_value_entry.text) then
+			dt.print("value is not valid")
+			return
+		end
 		if self.label == "add" then
 			table.insert(t_metadata_rules_parsed, parse_pref_metadata_rule(str))
 		end
