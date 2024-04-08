@@ -16,6 +16,8 @@ local MODULE = "git-annex"
 local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
 local PREF_METADATA_RULES = "metadata_rules"
 
+local POST_IMPORT_HOOK_ADD = true
+
 local T_METADATA_KEYS = {
 	"annex.numcopies",
 	"author",
@@ -1004,6 +1006,30 @@ dt.register_event("image selection changed", "selection-changed", function()
 	end
 end)
 
+dt.register_event("post import hook add", "post-import-image", function (_, image)
+	if POST_IMPORT_HOOK_ADD then
+		dt.print("Post import hook for image: " .. image.filename .. "started")
+		local cmd = {"git", "-C", image.path, "annex", "add", image.filename}
+		local result = shell.execute(cmd)
+		if result then
+			dt.print("Post import hook for image: " .. image.filename .. " succeeded")
+		else
+			dt.print("Post import hook for image: " .. image.filename .. " failed")
+		end
+	end
+end)
+dt.register_event("post import hook collection add", "post-import-film", function (_, film)
+	if POST_IMPORT_HOOK_ADD then
+		dt.print("Post import hook for film: " .. film.path .. "started")
+		local cmd = {"git", "-C", film.path, "annex", "add", film.path}
+		local result = shell.execute(cmd)
+		if result then
+			dt.print("Post import hook for image: " .. film.path .. " succeeded")
+		else
+			dt.print("Post import hook for image: " .. film.path .. " failed")
+		end
+	end
+end)
 
 
 return script_data
