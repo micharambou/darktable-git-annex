@@ -6,7 +6,7 @@
 !git-annex.lua
 
 !lib/
-lib/lib/
+lib/lib/luarocks/
 !lib/share/
 !lib/share/lua/
 !lib/share/lua/5.4/

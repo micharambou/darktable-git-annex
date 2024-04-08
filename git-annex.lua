@@ -4,11 +4,13 @@ local function script_path()
 end
 
 package.path = package.path .. ";" .. script_path() .. "lib/share/lua/5.4/?.lua"
+package.cpath = package.cpath .. ";" .. script_path() .. "lib/lib/lua/5.4/?.so"
 
 local dt = require("darktable")
 local du = require("lib/dtutils")
 local json = require("dkjson")
 local plstringx = require "pl.stringx"
+local path = require "pl.path"
 local pretty = require "pl.pretty"
 local validation = require "resty.validation"
 
@@ -337,7 +339,7 @@ end
 
 function shell.popen(...)
 	local cmd = shell.escape(...)
-	--print(cmd)
+	-- print(cmd)
 	return io.popen(cmd)
 end
 
@@ -366,17 +368,54 @@ local function set_annex_metadata(metadata_widget_box, ...)
 end
 
 local function annex_rootdir(image)
-	local f_annex_rootdir = shell.popen({ "git", "-C", image.path, "rev-parse", "--show-toplevel" })
-	return f_annex_rootdir:read("l")
+	if type(image) == "userdata" then
+		local f_annex_rootdir = shell.popen({ "git", "-C", image.path, "rev-parse", "--show-toplevel" })
+		return f_annex_rootdir:read("l")
+	end
+	if type(image) == "string" then 
+		local image_path, _ = path.splitpath(image) 
+		local f_annex_rootdir = shell.popen({ "git", "-C", image_path, "rev-parse", "--show-toplevel" })
+		return f_annex_rootdir:read("l")
+	end
 end
 local function annex_rootdir_bypath(path)
 	local f_annex_rootdir = shell.popen({ "git", "-C", path, "rev-parse", "--show-toplevel" })
 	return f_annex_rootdir:read("l")
 end
+local function build_annex_rootdir_table (t_filelist)
+	local t = {}
+	local tMetatable = {
+		__index = function(t, k, value)
+			rawset(t, k, { value })
+			return t
+		end,
+	}
+	setmetatable(t, tMetatable)
+	local function addfile(t, rootdir, filename)
+		if type(t[rootdir]) == "table" then
+			table.insert(t[rootdir], filename)
+		end
+	end
+	for _, image in pairs(t_filelist) do
+		addfile(t, annex_rootdir(image), image)
+	end
+	return t
+end
+
+
+local function call_git_annex(cmd, annex_path, filelist, ...)
+	local command = { "git", "-C", annex_path, "annex", cmd }
+	for _, argument in pairs(...) do
+		table.insert(command, argument)
+	end
+	for _, file in pairs(filelist) do
+		table.insert(command, file)	
+	end
+	return shell.execute(command)
+end
 
 local function call_git_annex_bulk(cmd, annex_path, ...)
-	--local annex_path = file_chooser_button.value
-	local command = { "git", "-C", annex_path, "annex", cmd, ... }
+	local command = { "git", "-C", annex_path, "annex", cmd, "-Jcpus", ... }
 	return shell.execute(command)
 end
 
@@ -431,6 +470,23 @@ local function get_status(images)
 	end
 end
 
+-- execute git annex with given subcommand on selected images.
+-- cmd - string, the git annex subcommand
+-- msg - string, the verb to be displayed to the user
+-- t_images - table containing images
+-- ... - table of optional arguments (e.g. -Jcpus)
+local function git_annex(cmd, msg, t_images, ...)
+	local notice = msg .. " from git annex"
+	dt.print(notice)
+	for rootdir, filelist in pairs(build_annex_rootdir_table(t_images)) do
+		local result = call_git_annex(cmd, rootdir, filelist, ...)
+		if result then
+			dt.print("finished " .. notice .. " in repository: " .. rootdir)
+		else
+			dt.print("errored " .. notice .. " in repository: " .. rootdir)
+		end
+	end
+end
 -- executes git annex with the given subcommand on the selected files
 --   cmd - string, the git annex subcommand
 --   msg - string, the verb to be displayed to the user
@@ -1006,28 +1062,23 @@ dt.register_event("image selection changed", "selection-changed", function()
 	end
 end)
 
-dt.register_event("post import hook add", "post-import-image", function (_, image)
+dt.register_event("Post import hook: collection status", "post-import-film", function (_, film)
 	if POST_IMPORT_HOOK_ADD then
-		dt.print("Post import hook for image: " .. image.filename .. "started")
-		local cmd = {"git", "-C", image.path, "annex", "add", image.filename}
-		local result = shell.execute(cmd)
-		if result then
-			dt.print("Post import hook for image: " .. image.filename .. " succeeded")
-		else
-			dt.print("Post import hook for image: " .. image.filename .. " failed")
+		dt.print("Post import hook: status for film: " .. film.path .. "started (" .. #film .. " images)")
+		local t_images = {}
+		for i=1,#film,1 do 
+			table.insert(t_images, film[i])
 		end
+		get_status(t_images)
 	end
 end)
-dt.register_event("post import hook collection add", "post-import-film", function (_, film)
+dt.register_event("Pre import hook: collect image filenames", "pre-import", function (_, t_images_filename)
+	git_annex("add", "add", t_images_filename, {"-Jcpus"})
+end)
+dt.register_event("post import hook status", "post-import-image", function (_, image)
 	if POST_IMPORT_HOOK_ADD then
-		dt.print("Post import hook for film: " .. film.path .. "started")
-		local cmd = {"git", "-C", film.path, "annex", "add", film.path}
-		local result = shell.execute(cmd)
-		if result then
-			dt.print("Post import hook for image: " .. film.path .. " succeeded")
-		else
-			dt.print("Post import hook for image: " .. film.path .. " failed")
-		end
+		dt.print("Post import hook for image: " .. image.filename .. "started")
+		get_status({image})
 	end
 end)
 
