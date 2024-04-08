@@ -374,7 +374,7 @@ end
 
 local function call_git_annex_bulk(cmd, annex_path, ...)
 	--local annex_path = file_chooser_button.value
-	local command = { "git", "-C", annex_path, "annex", cmd, ... }
+	local command = { "git", "-C", annex_path, "annex", cmd, "-Jcpus",  ... }
 	return shell.execute(command)
 end
 
