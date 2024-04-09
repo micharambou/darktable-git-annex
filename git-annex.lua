@@ -60,11 +60,13 @@ local T_IMAGE_PROPS = {
 	},
 }
 
-T_UTF8CHARS = {
+local T_UTF8CHARS = {
 	["star"] = utf8.char(0x2605),
 	["reject"] = utf8.char(0x29BB),
 	["tag"] = utf8.char(0x0001F3F7)
 }
+
+local include_xmp = true
 
 local function t_contains(t, value)
 	if next(t) == nil then
@@ -459,7 +461,15 @@ local function git_annex_bulk(cmd, msg, on_collection)
 		end
 	end
 	for _, image in pairs(images) do
-		addfile(t, annex_rootdir(image), image.path .. "/" .. image.filename)
+		local rootdir = annex_rootdir(image)
+		-- avoid duplicates
+		if not t_contains(t[rootdir], image.path .. "/" .. image.filename) then
+			addfile(t, rootdir, image.path .. "/" .. image.filename)
+		end
+		-- include sidecars in xmp mode
+		if include_xmp then
+			addfile(t, rootdir, image.sidecar)
+		end
 	end
 	for rootdir, filelist in pairs(t) do
 		local result = call_git_annex_bulk(cmd, rootdir, table.unpack(filelist))
@@ -608,6 +618,14 @@ mGa.widgets.collection_button_box = dt.new_widget("box")({
 	mGa.widgets.collection_get_btn,
 	mGa.widgets.collection_drop_btn,
 })
+mGa.widgets.xmp_toogle_check_btn = dt.new_widget("check_button"){
+	label = "include sidecars",
+	value = true,
+	tooltip = "Toogles xmp mode. If enabled, all sidecar files will be included",
+	clicked_callback = function (self)
+		include_xmp = self.value
+	end
+}
 -- action box
 mGa.widgets.action_box = dt.new_widget("box")({
 	dt.new_widget("section_label")({
@@ -615,6 +633,7 @@ mGa.widgets.action_box = dt.new_widget("box")({
 	}),
 	mGa.widgets.selection_box,
 	mGa.widgets.collection_button_box,
+	mGa.widgets.xmp_toogle_check_btn,
 })
 -- multiline input for user defined sync directories
 mGa.widgets.syncdir_entry = dt.new_widget("text_view")({
