@@ -20,6 +20,8 @@ local T_METADATA_KEYS = {
 	"annex.numcopies",
 	"author",
 	"tag",
+	"copy",
+	"move",
 }
 
 local T_OPERATORS = {
@@ -351,13 +353,23 @@ local function set_annex_metadata(metadata_widget_box, ...)
 			local value = metadata_widget_box[i][3].text
 			if active and not (value == "") then
 				if match_metadata_condition(condition, image) then
-					dt.print(image.filename .. ": apply metadata" .. prop .. "=" .. value)
-					local result = shell.execute({ "git", "-C", image.path, "annex", "metadata",
-						image.filename, "-s", prop .. "=" .. value })
-					if result then
-						dt.print(image.filename .. ": apply metadata ok")
+					if (prop == "copy" or prop == "move") then
+						dt.print(prop .. image.filename .. " to " .. value)
+						local result = shell.execute({ "git", "-C", image.path, "annex",  prop, image.filename, "--from-anywhere", "--to="..value })
+						if result then
+							dt.print(image.filename .. ": " ..prop .. " ok")
+						else
+							dt.print(image.filename .. ": " ..prop .. " failed")
+						end
 					else
-						dt.print(image.filename .. ": apply metadata failed")
+						dt.print(image.filename .. ": apply metadata" .. prop .. "=" .. value)
+						local result = shell.execute({ "git", "-C", image.path, "annex", "metadata",
+							image.filename, "-s", prop .. "=" .. value })
+						if result then
+							dt.print(image.filename .. ": apply metadata ok")
+						else
+							dt.print(image.filename .. ": apply metadata failed")
+						end
 					end
 				end
 			end
@@ -719,8 +731,17 @@ end
 
 for i, condition in pairs(t_metadata_rules_parsed) do
 	t_widgets_metadata_rules[i] = {
-		["entry"] = dt.new_widget("entry") {},
+		["entry"] = dt.new_widget("entry") {
+			placeholder = "value"
+		},
 		["combobox"] = dt.new_widget("combobox") {
+			changed_callback = function (self)
+				if (self.value == "copy" or self.value == "move") then
+					t_widgets_metadata_rules[i]["entry"].placeholder = "remote"
+				else
+					t_widgets_metadata_rules[i]["entry"].placeholder = "value"
+				end
+			end,
 			table.unpack(T_METADATA_KEYS)
 		}
 	}
