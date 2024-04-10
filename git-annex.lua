@@ -218,6 +218,22 @@ dt.preferences.register(
 	"A user defined repository to automatically add to sync directory list",
 	""
 )
+-- sidecar history feature toogle
+dt.preferences.register(
+	MODULE,
+	"sidecar_history_feature_enabled",
+	"bool",
+	"Git annex: enable sidecar history feature (experimental) ",
+	"set this to true to enable experimental sidecar history feature (restart required)",
+	false,
+	"",
+	"",
+	"",
+	"",
+	dt.new_widget("check_button")
+)
+
+local sidecar_history_feature_enabled = dt.preferences.read(MODULE, "sidecar_history_feature_enabled", "bool")
 
 MDRULE_PREFIX = ":mdrule:"
 local function get_metadata_pref_keys()
@@ -529,15 +545,27 @@ local function get_xmp_hitory(image)
 	return t_commits
 end
 
-local function refresh_sidecar_combobox(widget)
-	purge_combobox(widget)
+local f_sidecar_combobox = function ()
+	local t = {}
 	local xmp_hist = get_xmp_hitory(table.unpack(dt.gui.selection()))
 	table.sort(xmp_hist, function(a, b)
 		return df:parse(a.date).time < df:parse(b.date).time
 	end)
 	for i, commit in pairs(t_table_keys(xmp_hist)) do
-		widget[i] = commit .. " -- " .. xmp_hist[commit].date
+		t[i] = commit .. " -- " .. xmp_hist[commit].date
 	end
+	return t
+end
+
+-- general purpose function to purge combobox entries and refill
+-- widget: the combobox widget
+-- f: a function returning an indexed table, values will become widget entries
+-- ...: function arguments that will be passed to f
+local function refresh_combobox(widget, f, ...)
+	purge_combobox(widget)
+		for k, v in pairs(f(...)) do
+			widget[k] = v
+		end
 	widget.selected = 0
 end
 
@@ -1026,19 +1054,29 @@ mGa.widgets.metadata_stack = dt.new_widget("stack") {
 	mGa.widgets.metadata_rules_box,
 	mGa.widgets.metadata_settings_box,
 }
+mGa.widgets.sidecar_info_text_view = dt.new_widget("text_view"){
+	editable = false,
+}
 mGa.widgets.sidecar_combobox = dt.new_widget("combobox") {
+	label = "Select commit",
 	changed_callback = function(self)
+		local infobox_text = ""
 		if self.selected > 0 then
 			local image = table.unpack(dt.gui.selection())
 			local image_filepath = image.path .. "/" .. image.filename
 			local rootdir = annex_rootdir(image)
-			local commit, _ = table.unpack(plstringx.split(self.value, " -- "))
+			local commit, date = table.unpack(plstringx.split(self.value, " -- "))
 			local cmd = { "git", "-C", rootdir, "checkout", commit, image.sidecar }
 			local result = shell.execute(cmd)
 			if result then
 				image.drop_cache(image)
 			end
+			infobox_text = plstringx.join("\n", {
+				"commit: " .. commit,
+				"date: " .. date
+			})
 		end
+		mGa.widgets.sidecar_info_text_view.text = infobox_text
 	end,
 }
 mGa.widgets.sidecar_commit_btn = dt.new_widget("button") {
@@ -1050,14 +1088,17 @@ mGa.widgets.sidecar_commit_btn = dt.new_widget("button") {
 			local rootdir = annex_rootdir(image)
 			local cmd = { "git", "-C", rootdir, "commit", "-m", "dt xmp rollback for file: " .. image.sidecar }
 			local result = shell.execute(cmd)
-			refresh_sidecar_combobox(mGa.widgets.sidecar_combobox)
+			refresh_combobox(mGa.widgets.sidecar_combobox, f_sidecar_combobox)
 		end
 	end
 }
 mGa.widgets.sidecar_box = dt.new_widget("box") {
+	visible = sidecar_history_feature_enabled,
+	sensitive = false,
 	dt.new_widget("section_label") {
 		label = "Sidecar History"
 	},
+	mGa.widgets.sidecar_info_text_view,
 	mGa.widgets.sidecar_combobox,
 	mGa.widgets.sidecar_commit_btn,
 }
@@ -1125,12 +1166,13 @@ dt.register_event("image selection changed", "selection-changed", function()
 	if next(dt.gui.selection()) == nil then
 		mGa.widgets.selection_box.sensitive = false
 		mGa.widgets.metadata_action_selection_btn.sensitive = false
-		purge_combobox(mGa.widgets.sidecar_combobox)
+		mGa.widgets.sidecar_box.sensitive = false
 	else
 		mGa.widgets.selection_box.sensitive = true
 		mGa.widgets.metadata_action_selection_btn.sensitive = true
 		if tablelength(dt.gui.selection()) == 1 then
-			refresh_sidecar_combobox(mGa.widgets.sidecar_combobox)
+			mGa.widgets.sidecar_box.sensitive = true
+			refresh_combobox(mGa.widgets.sidecar_combobox, f_sidecar_combobox)
 		end
 	end
 end)
