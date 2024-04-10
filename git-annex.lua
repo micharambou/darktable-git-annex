@@ -1018,23 +1018,34 @@ mGa.widgets.sidecar_combobox = dt.new_widget("combobox") {
 			local cmd = { "git", "-C", rootdir, "checkout", self.value, image.sidecar }
 			local result = shell.execute(cmd)
 			if result then
-				cmd = { "git", "-C", rootdir, "commit", "-m", "dt xmp rollback for file: "..image.sidecar }
-				result = shell.execute(cmd)
 				image.drop_cache(image)
 			end
-			purge_combobox(self)
-			for i,commit in pairs(t_table_keys(get_xmp_hitory(table.unpack(dt.gui.selection())))) do
-				self[i] = commit
-			end
-			self.selected = 0
 		end
 	end,
+}
+mGa.widgets.sidecar_commit_btn = dt.new_widget("button"){
+	label = _("commit"),
+	clicked_callback = function (_)
+		local sidecar_combobox = mGa.widgets.sidecar_combobox
+		if (tablelength(dt.gui.selection()) > 0 and sidecar_combobox.selected > 0) then
+			local image = table.unpack(dt.gui.selection())
+			local rootdir = annex_rootdir(image)
+			local cmd = { "git", "-C", rootdir, "commit", "-m", "dt xmp rollback for file: "..image.sidecar }
+			local result = shell.execute(cmd)
+			purge_combobox(sidecar_combobox)
+			for i,commit in pairs(t_table_keys(get_xmp_hitory(table.unpack(dt.gui.selection())))) do
+				sidecar_combobox[i] = commit
+			end
+			sidecar_combobox.selected = 0
+		end
+	end
 }
 mGa.widgets.sidecar_box = dt.new_widget("box") {
 	dt.new_widget("section_label") {
 		label = "Sidecar History"
 	},
 	mGa.widgets.sidecar_combobox,
+	mGa.widgets.sidecar_commit_btn,
 }
 -- main box
 mGa.widgets.main_box = dt.new_widget("box")({
