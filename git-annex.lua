@@ -18,7 +18,6 @@ local MODULE = "git-annex"
 local PREF_SYNC_DEFAULT_DIR = "sync_default_dir"
 local PREF_METADATA_RULES = "metadata_rules"
 
-local POST_IMPORT_HOOK_ADD = true
 
 local T_METADATA_KEYS = {
 	"annex.numcopies",
@@ -199,6 +198,21 @@ dt.preferences.register(
 	"A user defined repository to automatically add to sync directory list",
 	""
 )
+-- toogle pre/post-import-hook "add"
+dt.preferences.register(
+	MODULE,
+	"pre_post_import_hook_add",
+	"bool",
+	"Git annex: enable Pre/Post Import Hook add",
+	"enable to automatically add files to annex on import (restart required)",
+	false,
+	"",
+	"",
+	"",
+	"",
+	dt.new_widget("check_button"){}
+)
+local POST_IMPORT_HOOK_ADD = dt.preferences.read(MODULE, "pre_post_import_hook_add", "bool")
 
 MDRULE_PREFIX = ":mdrule:"
 local function get_metadata_pref_keys()
@@ -1073,7 +1087,9 @@ dt.register_event("Post import hook: collection status", "post-import-film", fun
 	end
 end)
 dt.register_event("Pre import hook: collect image filenames", "pre-import", function (_, t_images_filename)
-	git_annex("add", "add", t_images_filename, {"-Jcpus"})
+	if POST_IMPORT_HOOK_ADD then
+		git_annex("add", "add", t_images_filename, {"-Jcpus"})
+	end
 end)
 dt.register_event("post import hook status", "post-import-image", function (_, image)
 	if POST_IMPORT_HOOK_ADD then
