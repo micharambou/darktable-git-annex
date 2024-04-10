@@ -40,25 +40,34 @@ local T_OPERATORS = {
 		end
 		return attached
 	end,
-	["is"] = function (x, y) return tostring(x) == y end,
-	["is not"] = function (x, y) return tostring(x) ~= y end,
+	["is"] = function(x, y) return tostring(x) == y end,
+	["is not"] = function(x, y) return tostring(x) ~= y end,
 }
 
 local T_IMAGE_PROPS = {
-	["rating"] = { 
+	["rating"] = {
 		["f"] = function(image) return image.rating end,
-		["compat"] = {"=", ">", "<" ,">=", "<="},
-		["valid"] = function (x) local r, _ = validation.number:between(-1, 5)(tonumber(x)) return r end
+		["compat"] = { "=", ">", "<", ">=", "<=" },
+		["valid"] = function(x)
+			local r, _ = validation.number:between(-1, 5)(tonumber(x))
+			return r
+		end
 	},
 	["tag"] = {
-		["f"] = function(image) return image.get_tags(image) end, 
-		["compat"] = {"attached"},
-		["valid"] = function (x) local r, _ = validation:minlen(1)(x) return r end
+		["f"] = function(image) return image.get_tags(image) end,
+		["compat"] = { "attached" },
+		["valid"] = function(x)
+			local r, _ = validation:minlen(1)(x)
+			return r
+		end
 	},
-	["altered"] = { 
-		["f"] = function(image) return image.is_altered end, 
-		["compat"] = {"is", "is not"},
-		["valid"] = function (x) local r, _ = validation:oneof("true", "false")(string.lower(x)) return r end
+	["altered"] = {
+		["f"] = function(image) return image.is_altered end,
+		["compat"] = { "is", "is not" },
+		["valid"] = function(x)
+			local r, _ = validation:oneof("true", "false")(string.lower(x))
+			return r
+		end
 	},
 }
 
@@ -70,6 +79,11 @@ local T_UTF8CHARS = {
 
 local include_xmp = true
 
+local function tablelength(t)
+	local count = 0
+	for _ in pairs(t) do count = count + 1 end
+	return count
+end
 local function t_contains(t, value)
 	if next(t) == nil then
 		return false
@@ -85,7 +99,7 @@ end
 local function purge_combobox(widget)
 	local entry_count = #widget
 	if entry_count > 0 then
-		for i=1,entry_count,1 do 
+		for i = 1, entry_count, 1 do
 			widget[1] = nil
 		end
 	end
@@ -95,14 +109,14 @@ local function set_combobox_entries(widget, element_list, ...)
 	for _, element in pairs(element_list) do
 		if t_contains(..., element) then
 			widget[i] = element
-			i = i +1
+			i = i + 1
 		end
 	end
 end
 local function select_combobox_entry_by_value(widget, value)
 	local entry_count = #widget
 	local match = false
-	for i=1, entry_count,1 do
+	for i = 1, entry_count, 1 do
 		if widget[i] == value then
 			widget.selected = i
 			match = true
@@ -110,9 +124,9 @@ local function select_combobox_entry_by_value(widget, value)
 		if match then break end
 	end
 end
-local t_table_keys = function (t)
+local t_table_keys = function(t)
 	local t_keys = {}
-	for k, _ in pairs(t) do 
+	for k, _ in pairs(t) do
 		table.insert(t_keys, k)
 	end
 	return t_keys
@@ -136,7 +150,8 @@ end
 local function update_edit_form(mGa, t_metadata_rules_parsed, rule_selected)
 	-- dirty hack: misuse image.prop_combox.name as shared value to indicate desired target value for operator combobox
 	mGa.widgets.metadata_settings_edit_image_prop_combobox.name = t_metadata_rules_parsed[rule_selected]["op"]
-	select_combobox_entry_by_value(mGa.widgets.metadata_settings_edit_image_prop_combobox, t_metadata_rules_parsed[rule_selected]["image_prop"])
+	select_combobox_entry_by_value(mGa.widgets.metadata_settings_edit_image_prop_combobox,
+		t_metadata_rules_parsed[rule_selected]["image_prop"])
 	mGa.widgets.metadata_settings_edit_label_entry.text = t_metadata_rules_parsed[rule_selected]["label"]
 	mGa.widgets.metadata_settings_edit_description_entry.text = t_metadata_rules_parsed[rule_selected]["description"]
 	mGa.widgets.metadata_settings_edit_value_entry.text = t_metadata_rules_parsed[rule_selected]["value"]
@@ -190,7 +205,7 @@ image properties
 
 
 -- preferences
--- default sync directory 
+-- default sync directory
 dt.preferences.register(
 	MODULE,
 	PREF_SYNC_DEFAULT_DIR,
@@ -222,7 +237,7 @@ local function get_metadata_rules()
 		return ""
 	else
 		for _, k in pairs(t) do
-			local _,_, prefix = table.unpack(plstringx.split(k, "/", 3))
+			local _, _, prefix = table.unpack(plstringx.split(k, "/", 3))
 			table.insert(t_metadata_rules, dt.preferences.read(MODULE, prefix, "string"))
 		end
 		local str_metadata_rules = plstringx.join("\n", t_metadata_rules)
@@ -232,7 +247,7 @@ end
 
 local function purge_metadata_preferences()
 	for _, k in pairs(get_metadata_pref_keys()) do
-		local _,_, prefix = table.unpack(plstringx.split(k, "/", 3))
+		local _, _, prefix = table.unpack(plstringx.split(k, "/", 3))
 		dt.preferences.destroy(MODULE, prefix)
 	end
 end
@@ -276,7 +291,7 @@ end
 local function write_metadata_rules_to_pref(t)
 	for i, condition in pairs(t) do
 		local str = plstringx.join(",", {
-			"label=".. condition["label"],
+			"label=" .. condition["label"],
 			"description=" .. condition["description"],
 			"image_prop=" .. condition["image_prop"],
 			"op=%" .. condition["op"],
@@ -355,11 +370,12 @@ local function set_annex_metadata(metadata_widget_box, ...)
 				if match_metadata_condition(condition, image) then
 					if (prop == "copy" or prop == "move") then
 						dt.print(prop .. image.filename .. " to " .. value)
-						local result = shell.execute({ "git", "-C", image.path, "annex",  prop, image.filename, "--from-anywhere", "--to="..value })
+						local result = shell.execute({ "git", "-C", image.path, "annex", prop, image.filename,
+							"--from-anywhere", "--to=" .. value })
 						if result then
-							dt.print(image.filename .. ": " ..prop .. " ok")
+							dt.print(image.filename .. ": " .. prop .. " ok")
 						else
-							dt.print(image.filename .. ": " ..prop .. " failed")
+							dt.print(image.filename .. ": " .. prop .. " failed")
 						end
 					else
 						dt.print(image.filename .. ": apply metadata" .. prop .. "=" .. value)
@@ -388,7 +404,7 @@ end
 
 local function call_git_annex_bulk(cmd, annex_path, ...)
 	--local annex_path = file_chooser_button.value
-	local command = { "git", "-C", annex_path, "annex", cmd, "-Jcpus",  ... }
+	local command = { "git", "-C", annex_path, "annex", cmd, "-Jcpus", ... }
 	return shell.execute(command)
 end
 
@@ -493,6 +509,20 @@ local function git_annex_bulk(cmd, msg, on_collection)
 			get_status(images)
 		end
 	end
+end
+
+local function get_xmp_hitory(image)
+	local xmp_file = image.sidecar
+	local rootdir = annex_rootdir(image)
+	local str_format = '{"commit": "%H","author": "%aN <%aE>","date": "%ad","message": "%f"}'
+	local cmd = { "git", "-C", rootdir, "log", "--pretty=format:" .. str_format, xmp_file }
+	local out = shell.popen(cmd)
+	local t_commits = {}
+	for line in out:lines() do
+		local obj = json.decode(line)
+		t_commits[obj.commit] = { ["author"] = obj.author, ["date"] = obj.date, ["message"] = obj.message }
+	end
+	return t_commits
 end
 
 local sync_checkbox = true
@@ -630,11 +660,11 @@ mGa.widgets.collection_button_box = dt.new_widget("box")({
 	mGa.widgets.collection_get_btn,
 	mGa.widgets.collection_drop_btn,
 })
-mGa.widgets.xmp_toogle_check_btn = dt.new_widget("check_button"){
+mGa.widgets.xmp_toogle_check_btn = dt.new_widget("check_button") {
 	label = "include sidecars",
 	value = true,
 	tooltip = "Toogles xmp mode. If enabled, all sidecar files will be included",
-	clicked_callback = function (self)
+	clicked_callback = function(self)
 		include_xmp = self.value
 	end
 }
@@ -735,7 +765,7 @@ for i, condition in pairs(t_metadata_rules_parsed) do
 			placeholder = "value"
 		},
 		["combobox"] = dt.new_widget("combobox") {
-			changed_callback = function (self)
+			changed_callback = function(self)
 				if (self.value == "copy" or self.value == "move") then
 					t_widgets_metadata_rules[i]["entry"].placeholder = "remote"
 				else
@@ -794,9 +824,9 @@ mGa.widgets.metadata_settings_text_view = dt.new_widget("text_view") {
 	editable = false,
 	tooltip = PREF_METADATA_RULES_TOOLTIP
 }
-mGa.widgets.metadata_settings_selection_combobox = dt.new_widget("combobox"){
+mGa.widgets.metadata_settings_selection_combobox = dt.new_widget("combobox") {
 	label = "Select",
-	changed_callback = function (self)
+	changed_callback = function(self)
 		if self.selected > 0 then
 			mGa.widgets.metadata_settings_text_view.text = plstringx.join("\n", {
 				"Label: " .. t_metadata_rules_parsed[self.selected]["label"],
@@ -808,7 +838,7 @@ mGa.widgets.metadata_settings_selection_combobox = dt.new_widget("combobox"){
 			if mGa.widgets.metadata_settings_combobox.selected == 2 then
 				update_edit_form(mGa, t_metadata_rules_parsed, self.selected)
 			end
-		else 
+		else
 			mGa.widgets.metadata_settings_text_view.text = ""
 		end
 	end
@@ -819,42 +849,44 @@ end
 mGa.widgets.metadata_settings_selection_combobox.selected = 0
 mGa.widgets.metadata_settings_remove_btn = dt.new_widget("button") {
 	label = _("Delete"),
-	clicked_callback = function (_)
+	clicked_callback = function(_)
 		local rule_selected = mGa.widgets.metadata_settings_selection_combobox.selected
-		if rule_selected > 0 then 
+		if rule_selected > 0 then
 			table.remove(t_metadata_rules_parsed, rule_selected)
 			purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
 			for i, condition in pairs(t_metadata_rules_parsed) do
-				mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
+				mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] ..
+				" | " .. condition["description"]
 			end
 			clear_edit_form(mGa)
 			mGa.widgets.metadata_settings_selection_combobox.selected = 0
 		end
 	end
 }
-mGa.widgets.metadata_settings_edit_description_entry = dt.new_widget("entry"){
+mGa.widgets.metadata_settings_edit_description_entry = dt.new_widget("entry") {
 	placeholder = "description"
 }
-mGa.widgets.metadata_settings_edit_label_entry = dt.new_widget("entry"){
+mGa.widgets.metadata_settings_edit_label_entry = dt.new_widget("entry") {
 	placeholder = "label "
 }
-mGa.widgets.metadata_settings_edit_label_description_box = dt.new_widget("box"){
+mGa.widgets.metadata_settings_edit_label_description_box = dt.new_widget("box") {
 	orientation = "horizontal",
 	mGa.widgets.metadata_settings_edit_label_entry,
 	mGa.widgets.metadata_settings_edit_description_entry,
 }
-mGa.widgets.metadata_settings_edit_op_combobox = dt.new_widget("combobox"){
+mGa.widgets.metadata_settings_edit_op_combobox = dt.new_widget("combobox") {
 	label = "operator",
 }
-mGa.widgets.metadata_settings_edit_image_prop_combobox = dt.new_widget("combobox"){
+mGa.widgets.metadata_settings_edit_image_prop_combobox = dt.new_widget("combobox") {
 	label = "property",
 	name = nil,
-	changed_callback = function (self)
+	changed_callback = function(self)
 		-- clean up operator combobox
 		purge_combobox(mGa.widgets.metadata_settings_edit_op_combobox)
 		-- set op combobox values with matching values unless no selection is done
-		if self.selected > 0 then 
-			set_combobox_entries(mGa.widgets.metadata_settings_edit_op_combobox, t_table_keys(T_OPERATORS), T_IMAGE_PROPS[self.value].compat)
+		if self.selected > 0 then
+			set_combobox_entries(mGa.widgets.metadata_settings_edit_op_combobox, t_table_keys(T_OPERATORS),
+				T_IMAGE_PROPS[self.value].compat)
 			if not (self.name == nil) then
 				select_combobox_entry_by_value(mGa.widgets.metadata_settings_edit_op_combobox, self.name)
 				self.name = nil
@@ -865,10 +897,10 @@ mGa.widgets.metadata_settings_edit_image_prop_combobox = dt.new_widget("combobox
 }
 set_combobox_entries(
 	mGa.widgets.metadata_settings_edit_op_combobox,
-	t_table_keys(T_OPERATORS), 
+	t_table_keys(T_OPERATORS),
 	T_IMAGE_PROPS[mGa.widgets.metadata_settings_edit_image_prop_combobox.value].compat
 )
-mGa.widgets.metadata_settings_edit_value_entry = dt.new_widget("entry"){
+mGa.widgets.metadata_settings_edit_value_entry = dt.new_widget("entry") {
 	placeholder = "value"
 }
 mGa.widgets.metadata_settings_apply_btn = dt.new_widget("button") {
@@ -879,30 +911,30 @@ mGa.widgets.metadata_settings_apply_btn = dt.new_widget("button") {
 		dt.print("Metadata rules applied, please restart dt")
 	end
 }
-mGa.widgets.metadata_settings_edit_params_box = dt.new_widget("box"){
+mGa.widgets.metadata_settings_edit_params_box = dt.new_widget("box") {
 	orientation = "horizontal",
 	mGa.widgets.metadata_settings_edit_image_prop_combobox,
 	mGa.widgets.metadata_settings_edit_op_combobox,
-	dt.new_widget("separator"){
+	dt.new_widget("separator") {
 		orientation = "horizontal"
 	},
 	mGa.widgets.metadata_settings_edit_value_entry
 }
-mGa.widgets.metadata_settings_edit_add_btn = dt.new_widget("button"){
+mGa.widgets.metadata_settings_edit_add_btn = dt.new_widget("button") {
 	name = nil,
 	label = _("add"),
-	clicked_callback = function (self)
-		local str = plstringx.join(",",{
-		"label=" .. mGa.widgets.metadata_settings_edit_label_entry.text,
-		"description=" .. mGa.widgets.metadata_settings_edit_description_entry.text,
-		"image_prop=" .. mGa.widgets.metadata_settings_edit_image_prop_combobox.value,
-		"op=" .. mGa.widgets.metadata_settings_edit_op_combobox.value,
-		"value=" .. mGa.widgets.metadata_settings_edit_value_entry.text
+	clicked_callback = function(self)
+		local str = plstringx.join(",", {
+			"label=" .. mGa.widgets.metadata_settings_edit_label_entry.text,
+			"description=" .. mGa.widgets.metadata_settings_edit_description_entry.text,
+			"image_prop=" .. mGa.widgets.metadata_settings_edit_image_prop_combobox.value,
+			"op=" .. mGa.widgets.metadata_settings_edit_op_combobox.value,
+			"value=" .. mGa.widgets.metadata_settings_edit_value_entry.text
 		})
 		-- validate input value of value entry first
-		if not 
-		T_IMAGE_PROPS[mGa.widgets.metadata_settings_edit_image_prop_combobox.value]
-		.valid(mGa.widgets.metadata_settings_edit_value_entry.text) then
+		if not
+			T_IMAGE_PROPS[mGa.widgets.metadata_settings_edit_image_prop_combobox.value]
+			.valid(mGa.widgets.metadata_settings_edit_value_entry.text) then
 			dt.print("value is not valid")
 			return
 		end
@@ -914,13 +946,14 @@ mGa.widgets.metadata_settings_edit_add_btn = dt.new_widget("button"){
 		end
 		purge_combobox(mGa.widgets.metadata_settings_selection_combobox)
 		for i, condition in pairs(t_metadata_rules_parsed) do
-			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition["description"]
+			mGa.widgets.metadata_settings_selection_combobox[i] = condition["label"] .. " | " .. condition
+			["description"]
 		end
 		clear_edit_form(mGa)
 		mGa.widgets.metadata_settings_selection_combobox.selected = 0
 	end
 }
-mGa.widgets.metadata_settings_edit_box = dt.new_widget("box"){
+mGa.widgets.metadata_settings_edit_box = dt.new_widget("box") {
 	orientation = "vertical",
 	mGa.widgets.metadata_settings_edit_label_description_box,
 	mGa.widgets.metadata_settings_edit_params_box,
@@ -930,17 +963,17 @@ mGa.widgets.metadata_settings_info_text_view = dt.new_widget("text_view") {
 	editable = false,
 	text = PREF_METADATA_RULES_TOOLTIP
 }
-mGa.widgets.metadata_settings_stack = dt.new_widget("stack"){
+mGa.widgets.metadata_settings_stack = dt.new_widget("stack") {
 	v_size_fixed = false,
 	h_size_fixed = false,
 	mGa.widgets.metadata_settings_edit_box,
 	mGa.widgets.metadata_settings_info_text_view,
 }
-mGa.widgets.metadata_settings_combobox = dt.new_widget("combobox"){
+mGa.widgets.metadata_settings_combobox = dt.new_widget("combobox") {
 	"new",
 	"edit",
 	"help",
-	changed_callback = function (self)
+	changed_callback = function(self)
 		-- selected new
 		if self.selected == 1 then
 			clear_edit_form(mGa)
@@ -955,7 +988,8 @@ mGa.widgets.metadata_settings_combobox = dt.new_widget("combobox"){
 			local rule_selected = mGa.widgets.metadata_settings_selection_combobox.selected
 			if rule_selected > 0 then
 				update_edit_form(mGa, t_metadata_rules_parsed, rule_selected)
-				mGa.widgets.metadata_settings_edit_add_btn.name = mGa.widgets.metadata_settings_selection_combobox.selected
+				mGa.widgets.metadata_settings_edit_add_btn.name = mGa.widgets.metadata_settings_selection_combobox
+				.selected
 			end
 		end
 	end
@@ -975,12 +1009,40 @@ mGa.widgets.metadata_stack = dt.new_widget("stack") {
 	mGa.widgets.metadata_rules_box,
 	mGa.widgets.metadata_settings_box,
 }
+mGa.widgets.sidecar_combobox = dt.new_widget("combobox") {
+	changed_callback = function(self)
+		if self.selected > 0 then
+			local image = table.unpack(dt.gui.selection())
+			local image_filepath = image.path .."/"..image.filename
+			local rootdir = annex_rootdir(image)
+			local cmd = { "git", "-C", rootdir, "checkout", self.value, image.sidecar }
+			local result = shell.execute(cmd)
+			if result then
+				cmd = { "git", "-C", rootdir, "commit", "-m", "dt xmp rollback for file: "..image.sidecar }
+				result = shell.execute(cmd)
+				image.drop_cache(image)
+			end
+			purge_combobox(self)
+			for i,commit in pairs(t_table_keys(get_xmp_hitory(table.unpack(dt.gui.selection())))) do
+				self[i] = commit
+			end
+			self.selected = 0
+		end
+	end,
+}
+mGa.widgets.sidecar_box = dt.new_widget("box") {
+	dt.new_widget("section_label") {
+		label = "Sidecar History"
+	},
+	mGa.widgets.sidecar_combobox,
+}
 -- main box
 mGa.widgets.main_box = dt.new_widget("box")({
 	mGa.widgets.action_box,
 	mGa.widgets.sync_box,
 	mGa.widgets.metadata_header_box,
 	mGa.widgets.metadata_stack,
+	mGa.widgets.sidecar_box,
 })
 
 -- ... and tell dt about it all
@@ -1007,11 +1069,11 @@ end
 -- it's time to destroy the script and then return the data to
 -- script_manager
 script_data.destroy = destroy
-script_data.restart = restart       -- only required for lib modules until we figure out how to destroy them
+script_data.restart = restart -- only required for lib modules until we figure out how to destroy them
 script_data.destroy_method =
-"hide"                              -- tell script_manager that we are hiding the lib so it knows to use the restart function
+"hide"                        -- tell script_manager that we are hiding the lib so it knows to use the restart function
 script_data.show =
-restart                             -- if the script was "off" when darktable exited, the module is hidden, so force it to show on start
+	restart                   -- if the script was "off" when darktable exited, the module is hidden, so force it to show on start
 
 -- add
 dt.register_event("git annex add", "shortcut", function()
@@ -1038,9 +1100,17 @@ dt.register_event("image selection changed", "selection-changed", function()
 	if next(dt.gui.selection()) == nil then
 		mGa.widgets.selection_box.sensitive = false
 		mGa.widgets.metadata_action_selection_btn.sensitive = false
+		purge_combobox(mGa.widgets.sidecar_combobox)
 	else
 		mGa.widgets.selection_box.sensitive = true
 		mGa.widgets.metadata_action_selection_btn.sensitive = true
+		if tablelength(dt.gui.selection()) == 1 then
+			purge_combobox(mGa.widgets.sidecar_combobox)
+			for i, commit in pairs(t_table_keys(get_xmp_hitory(table.unpack(dt.gui.selection())))) do
+				mGa.widgets.sidecar_combobox[i] = commit
+			end
+			mGa.widgets.sidecar_combobox.selected = 0
+		end
 	end
 end)
 
