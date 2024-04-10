@@ -22,3 +22,4 @@ lib/share/lua/5.4/pl/*
 !lib/share/lua/5.4/pl/class.lua
 !lib/share/lua/5.4/pl/tablex.lua
 !lib/share/lua/5.4/pl/Date.lua
+!lib/share/lua/5.4/pl/path.lua
