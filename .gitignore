@@ -4,6 +4,7 @@
 !.README.md
 !dt-git-annex-dev-1.rockspec
 !git-annex.lua
+!images/
 
 !lib/
 lib/lib/luarocks/
